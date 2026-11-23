@@ -1,3 +1,187 @@
-Hiii
-First PR
-Second PR
+
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Repository
+{
+    internal class ProductRepository
+    {
+        private readonly List<Product> _products =
+            new List<Product>();
+
+        private readonly string _filePath;
+
+        private readonly JsonSerializerOptions _options =
+            new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters = { new JsonStringEnumConverter() }
+            };
+
+        public ProductRepository(string filePath)
+        {
+            this._filePath = filePath;
+            this.LoadAll();
+        }
+
+        internal List<Product> GetAllProducts()
+        {
+            return this._products.ToList();
+        }
+
+        private void WriteAll()
+        {
+            string fileData = JsonSerializer.Serialize(
+                this._products, this._options);
+
+            File.WriteAllText(this._filePath, fileData);
+        }
+
+        private void LoadAll()
+        {
+            // Check whether the file exists
+            if (!File.Exists(this._filePath))
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+
+                this.WriteAll();
+
+                return;
+            }
+
+            // Read the file contents
+            string fileData = File.ReadAllText(this._filePath);
+
+            // Check whether the file is empty
+            if (string.IsNullOrWhiteSpace(fileData))
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+
+                this.WriteAll();
+
+                return;
+            }
+
+            // Deserialize JSON into in-memory collection
+            List<Product> products =
+                JsonSerializer.Deserialize<List<Product>>(
+                    fileData, this._options
+                ) ?? new List<Product>();
+
+            // Check whether the deserialized collection is empty
+            if (products.Count == 0)
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+
+                this.WriteAll();
+
+                return;
+            }
+
+            this._products.AddRange(products);
+        }
+
+        private List<Product> GetDefaultProducts()
+        {
+            return new List<Product>
+            {
+                // Vegetables
+
+                new Product
+                {
+                    Name = "Carrot (1 kg)",
+                    Price = 60,
+                    Category = Categories.Vegetable,
+                    Quantity = 50,
+                    ImageFileName = "carrot.jpg"
+                },
+
+                new Product
+                {
+                    Name = "Tomato (1 kg)",
+                    Price = 40,
+                    Category = Categories.Vegetable,
+                    Quantity = 50,
+                    ImageFileName = "tomato.jpg"
+                },
+
+                new Product
+                {
+                    Name = "Potato (1 kg)",
+                    Price = 35,
+                    Category = Categories.Vegetable,
+                    Quantity = 80,
+                    ImageFileName = "potato.jpg"
+                },
+
+                new Product
+                {
+                    Name = "Onion (1 kg)",
+                    Price = 45,
+                    Category = Categories.Vegetable,
+                    Quantity = 0,
+                    ImageFileName = "onion.jpg"
+                },
+
+                // Fruits
+
+                new Product
+                {
+                    Name = "Apple (1 kg)",
+                    Price = 180,
+                    Category = Categories.Fruit,
+                    Quantity = 30,
+                    ImageFileName = "apple.jpg"
+                },
+
+                new Product
+                {
+                    Name = "Banana (1 dozen)",
+                    Price = 60,
+                    Category = Categories.Fruit,
+                    Quantity = 40,
+                    ImageFileName = "banana.jpg"
+                },
+
+                new Product
+                {
+                    Name = "Orange (1 kg)",
+                    Price = 90,
+                    Category = Categories.Fruit,
+                    Quantity = 25,
+                    ImageFileName = "orange.jpg"
+                },
+
+                // Cookware
+
+                new Product
+                {
+                    Name = "Frying Pan (1 pc)",
+                    Price = 750,
+                    Category = Categories.Cookware,
+                    Quantity = 10,
+                    ImageFileName = "frying-pan.jpg"
+                },
+
+                new Product
+                {
+                    Name = "Pressure Cooker (1 pc)",
+                    Price = 1800,
+                    Category = Categories.Cookware,
+                    Quantity = 5,
+                    ImageFileName = "pressure-cooker.jpg"
+                },
+
+                new Product
+                {
+                    Name = "Ladle (1 pc)",
+                    Price = 120,
+                    Category = Categories.Cookware,
+                    Quantity = 1,
+                    ImageFileName = "ladle.jpg"
+                }
+            };
+        }
+    }
+}
