@@ -1,50 +1,62 @@
 
+using System.Security.Cryptography;
+using System.Text;
+using GroceryShopApp.Repository;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Services
+{
+    /// <summary>
+    /// Handles the business logics for admin operations.
+    /// </summary>
+    internal class AdminServices
+    {
+        private readonly UserRepository _userRepository;
+        private readonly ProductRepository _productRepository;
+        private readonly OrderRepository _orderRepository;
+
         /// <summary>
-        /// Validates the delivery address entered by the user.
+        /// Initializes a new instance of the <see cref="AdminServices"/> class.
         /// </summary>
-        /// <param name="deliveryAddress">Delivery address.</param>
-        /// <returns>Returns whether the address is valid or not.</returns>
-        internal static string ValidateDeliveryAddress(string? deliveryAddress)
+        /// <param name="userRepository">Repository of users.</param>
+        /// <param name="productRepository">Repository of products.</param>
+        /// <param name="orderRepository">Repository of orders.</param>
+        public AdminServices(
+            UserRepository userRepository,
+            ProductRepository productRepository,
+            OrderRepository orderRepository)
         {
-            if (string.IsNullOrWhiteSpace(deliveryAddress))
-            {
-                return "Delivery address cannot be empty.";
-            }
-
-            if (deliveryAddress.Trim().Length < 10 || deliveryAddress.Trim().Length > 200)
-            {
-                return "Delivery address must contain 10 to 200 characters.";
-            }
-
-            return "passed";
+            this._userRepository = userRepository;
+            this._productRepository = productRepository;
+            this._orderRepository = orderRepository;
         }
 
         /// <summary>
-        /// Validates the delivery time entered by the user.
+        /// Checks whether the user is an admin or not.
         /// </summary>
-        /// <param name="deliveryTime">Delivery time.</param>
-        /// <returns>Returns whether the delivery time is valid or not.</returns>
-        internal static string ValidateDeliveryTime(string? deliveryTime)
+        /// <param name="userName">Username of admin.</param>
+        /// <param name="password">Password of admin.</param>
+        /// <returns>Returns whether the user is admin or not.</returns>
+        internal bool IsAdmin(string userName, string password)
         {
-            if (string.IsNullOrWhiteSpace(deliveryTime))
+            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(password));
+            string hashedPassword = Convert.ToHexString(hash).ToLowerInvariant();
+
+            if (this._userRepository.IsUserAdmin(userName, hashedPassword))
             {
-                return "Delivery time cannot be empty.";
+                return true;
             }
 
-            if (!TimeOnly.TryParseExact(
-                deliveryTime,
-                "HH:mm",
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None,
-                out TimeOnly time))
-            {
-                return "Enter delivery time in HH:mm format.";
-            }
-
-            if (time < new TimeOnly(8, 0) || time > new TimeOnly(22, 0))
-            {
-                return "Delivery time must be between 08:00 and 22:00.";
-            }
-
-            return "passed";
+            return false;
         }
+
+        /// <summary>
+        /// Retrieves all the customer orders.
+        /// </summary>
+        /// <returns>List of all orders.</returns>
+        internal List<Order> GetAllOrders()
+        {
+            return this._orderRepository.GetAllOrders();
+        }
+    }
+}
