@@ -1,51 +1,78 @@
 
+using GroceryShopApp.Model;
+using GroceryShopApp.Services;
+
 namespace GroceryShopApp.View
 {
     /// <summary>
-    /// Handles the main menu logics for redirecting the user.
+    /// Enables the admin to enter details to login.
     /// </summary>
-    internal class MainMenu
+    internal class AdminLogin
     {
-        private readonly ProductView _productView;
-        private readonly CartView _cartView;
-
-        private string _currentUser;
+        private readonly AdminServices _adminServices;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="MainMenu"/> class.
+        /// Initializes a new instance of the <see cref="AdminLogin"/> class.
         /// </summary>
-        /// <param name="productView">View level operation of the product.</param>
-        /// <param name="cartView">View level operation of the cart.</param>
-        public MainMenu(ProductView productView, CartView cartView)
+        /// <param name="adminServices">Services of admin.</param>
+        public AdminLogin(AdminServices adminServices)
         {
-            this._currentUser = string.Empty;
-            this._productView = productView;
-            this._cartView = cartView;
+            this._adminServices = adminServices;
         }
 
         /// <summary>
-        /// Assigns the current user for session handling.
+        /// Asks the user for admin credentials to login.
         /// </summary>
-        /// <param name="userName">Unique username of the user.</param>
-        public void AssignCurrentUser(string userName)
+        internal void Login()
         {
-            this._currentUser = userName;
+            Console.Write($@"
+==================================
+          ADMIN LOG-IN
+==================================
+");
+
+            Console.Write("Enter admin user-name: ");
+            string? userName = Console.ReadLine();
+
+            Console.Write("Enter admin password [Alpha-numeric]: ");
+            string? password = Console.ReadLine();
+
+            string validatorMessage = Validator.ValidateLoginFields(userName, password);
+
+            if (validatorMessage != "passed")
+            {
+                ConsoleHelper.WriteErrorMessage($"\n{validatorMessage}\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            if (!this._adminServices.IsAdmin(userName!, password!))
+            {
+                ConsoleHelper.WriteErrorMessage("\nUser is not an admin\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            ConsoleHelper.WriteSuccessMessage("\nWelcome! Admin\n");
+            Thread.Sleep(1000);
+            Console.Clear();
+
+            this.AdminMenu();
         }
 
         /// <summary>
-        /// Displays the menu options for redirecting.
+        /// Displays the menu options for the admin.
         /// </summary>
-        internal void MenuOptions()
+        internal void AdminMenu()
         {
             while (true)
             {
-                Console.Write($@"
+                Console.Write(@"
 ==================================
-            MAIN MENU
+          ADMIN MENU
 ==================================
-[P]roducts
-[C]art Items
-[L]og out
+[O] View Customer Orders
+[L]ogout
 
 Enter Choice: ");
 
@@ -54,21 +81,14 @@ Enter Choice: ");
 
                 switch (userChoice)
                 {
-                    case ConsoleKey.P:
-                        this._productView.DisplayProductMenu(this._currentUser);
-                        break;
-
-                    case ConsoleKey.C:
-                        this._cartView.DisplayCart(this._currentUser);
+                    case ConsoleKey.O:
+                        this.DisplayOrders();
                         break;
 
                     case ConsoleKey.L:
-                        this._currentUser = string.Empty;
-
                         ConsoleHelper.WriteColored("\nLogging out...", ConsoleColor.Yellow);
                         Thread.Sleep(1000);
                         Console.Clear();
-
                         return;
 
                     default:
@@ -76,6 +96,52 @@ Enter Choice: ");
                         break;
                 }
             }
+        }
+
+        /// <summary>
+        /// Displays all customer orders.
+        /// </summary>
+        private void DisplayOrders()
+        {
+            List<Order> orders = this._adminServices.GetAllOrders();
+
+            Console.WriteLine(@"
+==================================
+        CUSTOMER ORDERS
+==================================");
+
+            if (orders.Count == 0)
+            {
+                ConsoleHelper.WriteErrorMessage("\nNo orders found.\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            foreach (Order order in orders)
+            {
+                Console.WriteLine($@"
+==================================
+Order ID: {order.OrderId}
+Customer: {order.UserName}
+Order Date: {order.OrderDate}
+Delivery Address: {order.DeliveryAddress}
+Delivery Time: {order.DeliveryTime}");
+
+                foreach (OrderItem item in order.Items)
+                {
+                    Console.WriteLine($@"
+Product: {item.ProductName}
+Price: ₹{item.Price}
+Quantity: {item.Quantity}
+Subtotal: ₹{item.SubTotal}");
+                }
+
+                Console.WriteLine($@"
+Total Amount: ₹{order.TotalAmount}
+==================================");
+            }
+
+            ConsoleHelper.CleanConsole();
         }
     }
 }
