@@ -1,0 +1,226 @@
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Repository
+{
+    /// <summary>
+    /// Handles the storage and retrieval of product data to and from files.
+    /// </summary>
+    internal class ProductRepository
+    {
+        private readonly List<Product> _products = new List<Product>();
+        private readonly string _filePath;
+
+        private readonly JsonSerializerOptions _options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() },
+        };
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ProductRepository"/> class.
+        /// </summary>
+        /// <param name="filePath">Path where the product data-file is created.</param>
+        public ProductRepository(string filePath)
+        {
+            this._filePath = filePath;
+            this.LoadAll();
+        }
+
+        /// <summary>
+        /// Retrieves all the products from the files.
+        /// </summary>
+        /// <returns>Products from files.</returns>
+        internal List<Product> GetAllProducts()
+        {
+            return this._products.ToList();
+        }
+
+        /// <summary>
+        /// Updates the stock quantity of a purchased product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be reduced.</param>
+        internal void UpdateProductStock(string productName, int quantity)
+        {
+            Product? product = this._products.FirstOrDefault(
+                item => item.Name == productName);
+
+            if (product != null)
+            {
+                product.Quantity -= quantity;
+                this.WriteAll();
+            }
+        }
+
+
+        /// <summary>
+        /// Adds a new product to the repository.
+        /// </summary>
+        /// <param name="product">Product details.</param>
+        internal void AddProduct(Product product)
+        {
+            this._products.Add(product);
+            this.WriteAll();
+        }
+
+        /// <summary>
+        /// Updates the available stock of an existing product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be added.</param>
+        internal void AddProductStock(string productName, int quantity)
+        {
+            Product? product = this._products.FirstOrDefault(
+                item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            if (product != null)
+            {
+                product.Quantity += quantity;
+                this.WriteAll();
+            }
+        }
+
+        /// <summary>
+        /// Checks whether a product already exists.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <returns>Returns true if product exists.</returns>
+        internal bool IsProductExists(string productName)
+        {
+            return this._products.Any(product => product.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void WriteAll()
+        {
+            string fileData = JsonSerializer.Serialize(this._products, this._options);
+            File.WriteAllText(this._filePath, fileData);
+        }
+
+        private void LoadAll()
+        {
+            if (!File.Exists(this._filePath))
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+                this.WriteAll();
+                return;
+            }
+
+            string fileData = File.ReadAllText(this._filePath);
+            if (string.IsNullOrWhiteSpace(fileData))
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+                this.WriteAll();
+                return;
+            }
+
+            List<Product> products = JsonSerializer.Deserialize<List<Product>>(fileData, this._options) ?? new List<Product>();
+
+            if (products.Count == 0)
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+                this.WriteAll();
+                return;
+            }
+
+            this._products.AddRange(products);
+        }
+
+        private List<Product> GetDefaultProducts()
+        {
+            return new List<Product>
+            {
+                new Product
+                {
+                    Name = "Carrot (1 kg)",
+                    Price = 60,
+                    Category = Categories.Vegetable,
+                    Quantity = 50,
+                    ImageFile = "carrot.jpg",
+                },
+
+                new Product
+                {
+                    Name = "Tomato (1 kg)",
+                    Price = 40,
+                    Category = Categories.Vegetable,
+                    Quantity = 50,
+                    ImageFile = "tomato.jpg",
+                },
+
+                new Product
+                {
+                    Name = "Potato (1 kg)",
+                    Price = 35,
+                    Category = Categories.Vegetable,
+                    Quantity = 80,
+                    ImageFile = "potato.jpg",
+                },
+
+                new Product
+                {
+                    Name = "Onion (1 kg)",
+                    Price = 45,
+                    Category = Categories.Vegetable,
+                    Quantity = 0,
+                    ImageFile = "onion.jpg",
+                },
+
+                new Product
+                {
+                    Name = "Apple (1 kg)",
+                    Price = 180,
+                    Category = Categories.Fruit,
+                    Quantity = 30,
+                    ImageFile = "apple.jpg",
+                },
+
+                new Product
+                {
+                    Name = "Banana (1 dozen)",
+                    Price = 60,
+                    Category = Categories.Fruit,
+                    Quantity = 40,
+                    ImageFile = "banana.jpg",
+                },
+
+                new Product
+                {
+                    Name = "Orange (1 kg)",
+                    Price = 90,
+                    Category = Categories.Fruit,
+                    Quantity = 25,
+                    ImageFile = "orange.jpg",
+                },
+
+                new Product
+                {
+                    Name = "Frying Pan (1 pc)",
+                    Price = 750,
+                    Category = Categories.Cookware,
+                    Quantity = 10,
+                    ImageFile = "frying-pan.jpg",
+                },
+
+                new Product
+                {
+                    Name = "Pressure Cooker (1 pc)",
+                    Price = 1800,
+                    Category = Categories.Cookware,
+                    Quantity = 5,
+                    ImageFile = "pressure-cooker.jpg",
+                },
+
+                new Product
+                {
+                    Name = "Ladle (1 pc)",
+                    Price = 120,
+                    Category = Categories.Cookware,
+                    Quantity = 1,
+                    ImageFile = "ladle.jpg",
+                },
+            };
+        }
+    }
+}
