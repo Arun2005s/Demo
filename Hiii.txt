@@ -1,9 +1,50 @@
 
         /// <summary>
-        /// Retrieves all products from the repository.
+        /// Validates the delivery address entered by the user.
         /// </summary>
-        /// <returns>List of all products.</returns>
-        internal List<Product> GetAllProducts()
+        /// <param name="deliveryAddress">Delivery address.</param>
+        /// <returns>Returns whether the address is valid or not.</returns>
+        internal static string ValidateDeliveryAddress(string? deliveryAddress)
         {
-            return this._productRepository.GetAllProducts();
+            if (string.IsNullOrWhiteSpace(deliveryAddress))
+            {
+                return "Delivery address cannot be empty.";
+            }
+
+            if (deliveryAddress.Trim().Length < 10 || deliveryAddress.Trim().Length > 200)
+            {
+                return "Delivery address must contain 10 to 200 characters.";
+            }
+
+            return "passed";
+        }
+
+        /// <summary>
+        /// Validates the delivery time entered by the user.
+        /// </summary>
+        /// <param name="deliveryTime">Delivery time.</param>
+        /// <returns>Returns whether the delivery time is valid or not.</returns>
+        internal static string ValidateDeliveryTime(string? deliveryTime)
+        {
+            if (string.IsNullOrWhiteSpace(deliveryTime))
+            {
+                return "Delivery time cannot be empty.";
+            }
+
+            if (!TimeOnly.TryParseExact(
+                deliveryTime,
+                "HH:mm",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out TimeOnly time))
+            {
+                return "Enter delivery time in HH:mm format.";
+            }
+
+            if (time < new TimeOnly(8, 0) || time > new TimeOnly(22, 0))
+            {
+                return "Delivery time must be between 08:00 and 22:00.";
+            }
+
+            return "passed";
         }
