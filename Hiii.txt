@@ -1,78 +1,63 @@
 
-using GroceryShopApp.Model;
+using GroceryShopApp.Repository;
 using GroceryShopApp.Services;
+using GroceryShopApp.View;
 
-namespace GroceryShopApp.View
+namespace GroceryShopApp
 {
     /// <summary>
-    /// Enables the admin to enter details to login.
+    /// Entry point of the application.
     /// </summary>
-    internal class AdminLogin
+    internal class Program
     {
-        private readonly AdminServices _adminServices;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AdminLogin"/> class.
-        /// </summary>
-        /// <param name="adminServices">Services of admin.</param>
-        public AdminLogin(AdminServices adminServices)
+        private static void Main(string[] args)
         {
-            this._adminServices = adminServices;
-        }
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-        /// <summary>
-        /// Asks the user for admin credentials to login.
-        /// </summary>
-        internal void Login()
-        {
-            Console.Write($@"
-==================================
-          ADMIN LOG-IN
-==================================
-");
+            UserRepository userRepository = new UserRepository("Users.json");
+            ProductRepository productRepository = new ProductRepository("Products.json");
+            CartRepository cartRepository = new CartRepository("Carts.json");
+            OrderRepository orderRepository = new OrderRepository("Orders.json");
 
-            Console.Write("Enter admin user-name: ");
-            string? userName = Console.ReadLine();
+            UserServices userServices = new UserServices(userRepository);
+            ProductServices productServices = new ProductServices(productRepository);
 
-            Console.Write("Enter admin password [Alpha-numeric]: ");
-            string? password = Console.ReadLine();
+            CartServices cartServices = new CartServices(
+                cartRepository,
+                productRepository,
+                orderRepository);
 
-            string validatorMessage = Validator.ValidateLoginFields(userName, password);
+            AdminServices adminServices = new AdminServices(
+                userRepository,
+                productRepository,
+                orderRepository);
 
-            if (validatorMessage != "passed")
-            {
-                ConsoleHelper.WriteErrorMessage($"\n{validatorMessage}\n");
-                ConsoleHelper.CleanConsole();
-                return;
-            }
+            ProductView productView = new ProductView(
+                productServices,
+                cartServices);
 
-            if (!this._adminServices.IsAdmin(userName!, password!))
-            {
-                ConsoleHelper.WriteErrorMessage("\nUser is not an admin\n");
-                ConsoleHelper.CleanConsole();
-                return;
-            }
+            CartView cartView = new CartView(cartServices);
 
-            ConsoleHelper.WriteSuccessMessage("\nWelcome! Admin\n");
-            Thread.Sleep(1000);
-            Console.Clear();
+            MainMenu mainMenu = new MainMenu(
+                productView,
+                cartView);
 
-            this.AdminMenu();
-        }
+            UserAuth userAuth = new UserAuth(
+                userServices,
+                mainMenu);
 
-        /// <summary>
-        /// Displays the menu options for the admin.
-        /// </summary>
-        internal void AdminMenu()
-        {
+            AdminLogin adminLogin = new AdminLogin(adminServices);
+
             while (true)
             {
-                Console.Write(@"
+                Console.Write($@"
 ==================================
-          ADMIN MENU
+         GROCERY SHOP APP
 ==================================
-[O] View Customer Orders
-[L]ogout
+[L]ogIn
+[S]ignUp
+[A]dmin login
+[E]xit
 
 Enter Choice: ");
 
@@ -81,67 +66,28 @@ Enter Choice: ");
 
                 switch (userChoice)
                 {
-                    case ConsoleKey.O:
-                        this.DisplayOrders();
+                    case ConsoleKey.S:
+                        userAuth.Register();
                         break;
 
                     case ConsoleKey.L:
-                        ConsoleHelper.WriteColored("\nLogging out...", ConsoleColor.Yellow);
+                        userAuth.Login();
+                        break;
+
+                    case ConsoleKey.A:
+                        adminLogin.Login();
+                        break;
+
+                    case ConsoleKey.E:
+                        ConsoleHelper.WriteColored("\nExiting...", ConsoleColor.Cyan);
                         Thread.Sleep(1000);
-                        Console.Clear();
-                        return;
+                        Environment.Exit(0);
+                        break;
 
                     default:
-                        ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
                         break;
                 }
             }
-        }
-
-        /// <summary>
-        /// Displays all customer orders.
-        /// </summary>
-        private void DisplayOrders()
-        {
-            List<Order> orders = this._adminServices.GetAllOrders();
-
-            Console.WriteLine(@"
-==================================
-        CUSTOMER ORDERS
-==================================");
-
-            if (orders.Count == 0)
-            {
-                ConsoleHelper.WriteErrorMessage("\nNo orders found.\n");
-                ConsoleHelper.CleanConsole();
-                return;
-            }
-
-            foreach (Order order in orders)
-            {
-                Console.WriteLine($@"
-==================================
-Order ID: {order.OrderId}
-Customer: {order.UserName}
-Order Date: {order.OrderDate}
-Delivery Address: {order.DeliveryAddress}
-Delivery Time: {order.DeliveryTime}");
-
-                foreach (OrderItem item in order.Items)
-                {
-                    Console.WriteLine($@"
-Product: {item.ProductName}
-Price: ₹{item.Price}
-Quantity: {item.Quantity}
-Subtotal: ₹{item.SubTotal}");
-                }
-
-                Console.WriteLine($@"
-Total Amount: ₹{order.TotalAmount}
-==================================");
-            }
-
-            ConsoleHelper.CleanConsole();
         }
     }
 }
