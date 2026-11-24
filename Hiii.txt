@@ -2,26 +2,32 @@
 namespace GroceryShopApp.Model
 {
     /// <summary>
-    /// Cart class is the class which consists of properties of cart products.
+    /// OrderItem class consists of the purchased product details.
     /// </summary>
-    internal class Cart
+    internal class OrderItem
     {
         /// <summary>
-        /// Gets or sets the UserName of the user.
+        /// Gets or sets the name of the product.
         /// </summary>
-        /// <value>Name of user</value>
-        public string UserName { get; set; } = string.Empty;
+        /// <value>Name of product</value>
+        public string ProductName { get; set; } = string.Empty;
 
         /// <summary>
-        /// Gets or sets the product.
+        /// Gets or sets the price of the product.
         /// </summary>
-        /// <value>Product values</value>
-        public Product Product { get; set; } = new Product();
+        /// <value>Price of product</value>
+        public decimal Price { get; set; }
 
         /// <summary>
-        /// Gets or sets the quantity of the product in cart.
+        /// Gets or sets the purchased quantity.
         /// </summary>
-        /// <value>Quantity of product in cart</value>
-        public int CartQuantity { get; set; }
+        /// <value>Quantity purchased</value>
+        public int Quantity { get; set; }
+
+        /// <summary>
+        /// Gets or sets the subtotal of the product.
+        /// </summary>
+        /// <value>Subtotal of product</value>
+        public decimal SubTotal { get; set; }
     }
 }
