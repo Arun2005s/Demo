@@ -5,194 +5,192 @@ using GroceryShopApp.Services;
 namespace GroceryShopApp.View
 {
     /// <summary>
-    /// Performs the view level operations for cart and checkout.
+    /// Performs the view level fetching and display operations for products.
     /// </summary>
-    internal class CartView
+    internal class ProductView
     {
+        private readonly ProductServices _productServices;
         private readonly CartServices _cartServices;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="CartView"/> class.
+        /// Initializes a new instance of the <see cref="ProductView"/> class.
         /// </summary>
+        /// <param name="productServices">Services of the product.</param>
         /// <param name="cartServices">Services of the cart.</param>
-        public CartView(CartServices cartServices)
+        public ProductView(ProductServices productServices, CartServices cartServices)
         {
+            this._productServices = productServices;
             this._cartServices = cartServices;
         }
 
         /// <summary>
-        /// Displays the cart products of the current user.
+        /// Displays the product menu and fetches the user choice to redirect.
         /// </summary>
-        /// <param name="userName">Username of the user.</param>
-        internal void DisplayCart(string userName)
+        /// <param name="userName">Username of the current user.</param>
+        internal void DisplayProductMenu(string userName)
         {
-            List<Cart> carts = this._cartServices.GetCart(userName);
-
-            Console.WriteLine(@"
-==================================
-            YOUR CART
-==================================");
-
-            if (carts.Count == 0)
+            while (true)
             {
-                ConsoleHelper.WriteErrorMessage("\nYour cart is empty.\n");
-                ConsoleHelper.CleanConsole();
-                return;
-            }
-
-            for (int i = 0; i < carts.Count; i++)
-            {
-                Cart cart = carts[i];
-
-                Console.WriteLine($@"
-{i + 1}. Product: {cart.Product.Name}
-   Price: ₹{cart.Product.Price}
-   Quantity: {cart.CartQuantity}
-   Subtotal: ₹{cart.Product.Price * cart.CartQuantity}");
-            }
-
-            decimal totalAmount = this._cartServices.GetCartTotal(userName);
-
-            Console.WriteLine($@"
+                Console.Write(@"
 ==================================
-Total Amount: ₹{totalAmount}
-==================================");
-
-            Console.Write(@"
-[C]heckout
+          PRODUCT MENU
+==================================
+[V]egetables
+[F]ruits
+[C]ookware
 [B]ack to Main Menu
 
 Enter Choice: ");
 
-            ConsoleKey userChoice = Console.ReadKey().Key;
-            Console.Clear();
+                ConsoleKey userChoice = Console.ReadKey().Key;
+                Console.Clear();
 
-            switch (userChoice)
-            {
-                case ConsoleKey.C:
-                    this.Checkout(userName);
-                    break;
+                switch (userChoice)
+                {
+                    case ConsoleKey.V:
+                        this.DisplayProducts(Categories.Vegetable, userName);
+                        break;
 
-                case ConsoleKey.B:
-                    return;
+                    case ConsoleKey.F:
+                        this.DisplayProducts(Categories.Fruit, userName);
+                        break;
 
-                default:
-                    ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
-                    ConsoleHelper.CleanConsole();
-                    break;
+                    case ConsoleKey.C:
+                        this.DisplayProducts(Categories.Cookware, userName);
+                        break;
+
+                    case ConsoleKey.B:
+                        return;
+
+                    default:
+                        ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
+                        break;
+                }
             }
         }
 
-        /// <summary>
-        /// Handles the checkout process and retrieves delivery details.
-        /// </summary>
-        /// <param name="userName">Username of the user.</param>
-        private void Checkout(string userName)
+        private void DisplayProducts(Categories category, string userName)
         {
-            string deliveryAddress;
+            List<Product> products = this._productServices.GetProductsByCategory(category);
 
             while (true)
-            {
-                Console.Write("\nEnter delivery address: ");
-                deliveryAddress = Console.ReadLine() ?? string.Empty;
-
-                string validatorMessage = Validator.ValidateDeliveryAddress(deliveryAddress);
-
-                if (validatorMessage != "passed")
-                {
-                    ConsoleHelper.WriteErrorMessage($"\n{validatorMessage}\n");
-                    continue;
-                }
-
-                deliveryAddress = deliveryAddress.Trim();
-                break;
-            }
-
-            string deliveryTime;
-
-            while (true)
-            {
-                Console.Write("\nEnter delivery time (HH:mm) [08:00 - 22:00]: ");
-                deliveryTime = Console.ReadLine() ?? string.Empty;
-
-                string validatorMessage = Validator.ValidateDeliveryTime(deliveryTime);
-
-                if (validatorMessage != "passed")
-                {
-                    ConsoleHelper.WriteErrorMessage($"\n{validatorMessage}\n");
-                    continue;
-                }
-
-                deliveryTime = deliveryTime.Trim();
-                break;
-            }
-
-            List<Cart> carts = this._cartServices.GetCart(userName);
-
-            decimal totalAmount = this._cartServices.GetCartTotal(userName);
-
-            Console.WriteLine(@"
-==================================
-           ORDER SUMMARY
-==================================");
-
-            foreach (Cart cart in carts)
             {
                 Console.WriteLine($@"
-Product: {cart.Product.Name}
-Price: ₹{cart.Product.Price}
-Quantity: {cart.CartQuantity}
-Subtotal: ₹{cart.Product.Price * cart.CartQuantity}");
-            }
-
-            Console.WriteLine($@"
-Delivery Address: {deliveryAddress}
-Delivery Time: {deliveryTime}
-
 ==================================
-Total Amount: ₹{totalAmount}
+            {category.ToString().ToUpper()}
 ==================================");
 
-            Console.Write("\nConfirm Order? [Y/N]: ");
-            ConsoleKey confirmation = Console.ReadKey().Key;
-            Console.WriteLine();
+                this.DisplayProductList(products);
 
-            if (confirmation != ConsoleKey.Y)
+                Console.Write(@"
+[S]earch Product
+[B]ack to Categories
+
+Enter product number to select: ");
+
+                string? choice = Console.ReadLine();
+
+                if (string.Equals(choice, "B", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.Clear();
+                    return;
+                }
+
+                if (string.Equals(choice, "S", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.Write("\nEnter product name to search: ");
+                    string searchName = Console.ReadLine() ?? string.Empty;
+
+                    if (string.IsNullOrWhiteSpace(searchName))
+                    {
+                        ConsoleHelper.WriteErrorMessage("\nSearch name cannot be empty.\n");
+                        continue;
+                    }
+
+                    products = this._productServices.SearchProducts(category, searchName.Trim());
+                    Console.Clear();
+
+                    if (products.Count == 0)
+                    {
+                        ConsoleHelper.WriteErrorMessage("\nNo products found.\n");
+                    }
+
+                    continue;
+                }
+
+                if (!int.TryParse(choice, out int productNumber) ||
+                    productNumber < 1 ||
+                    productNumber > products.Count)
+                {
+                    ConsoleHelper.WriteErrorMessage("\nInvalid product selection.\n");
+                    continue;
+                }
+
+                Product selectedProduct = products[productNumber - 1];
+
+                this.DisplaySelectedProduct(selectedProduct, userName);
+            }
+        }
+
+        private void DisplayProductList(List<Product> products)
+        {
+            if (products.Count == 0)
             {
-                ConsoleHelper.WriteErrorMessage("\nOrder cancelled. Your cart has been retained.\n");
-                ConsoleHelper.CleanConsole();
+                ConsoleHelper.WriteErrorMessage("\nNo products found.\n");
                 return;
             }
 
-            Order? order = this._cartServices.Checkout(
+            for (int i = 0; i < products.Count; i++)
+            {
+                Product product = products[i];
+
+                Console.WriteLine($"\n{i + 1}. Product: {product.Name}");
+                Console.WriteLine($"   Price: ₹{product.Price}");
+                Console.WriteLine(product.Quantity == 0
+                    ? "   Status: Out of stock"
+                    : $"   Remaining Stock: {product.Quantity}");
+            }
+        }
+
+        private void DisplaySelectedProduct(Product product, string userName)
+        {
+            Console.WriteLine(@$"
+==================================
+        PRODUCT DETAILS
+==================================
+Name: {product.Name}
+Price: ₹{product.Price}
+Category: {product.Category}
+Stock: {product.Quantity}
+Image: {product.ImageFile}");
+
+            if (product.Quantity == 0)
+            {
+                ConsoleHelper.WriteErrorMessage("\nOut of stock. Cannot add this product.\n");
+                return;
+            }
+
+            Console.Write("\nEnter quantity to add to cart: ");
+
+            if (!int.TryParse(Console.ReadLine(), out int quantity) || quantity <= 0)
+            {
+                ConsoleHelper.WriteErrorMessage("\nInvalid quantity.\n");
+                return;
+            }
+
+            string result = this._cartServices.AddToCart(
                 userName,
-                deliveryAddress,
-                deliveryTime);
+                product.Name,
+                quantity);
 
-            if (order == null)
+            if (result == "Product added to cart successfully.")
             {
-                ConsoleHelper.WriteErrorMessage(
-                    "\nCheckout failed. Product stock may have changed. Please check your cart.\n");
-                ConsoleHelper.CleanConsole();
-                return;
+                ConsoleHelper.WriteSuccessMessage($"\n{result}\n");
             }
-
-            ConsoleHelper.WriteSuccessMessage("\nOrder placed successfully!\n");
-
-            Console.WriteLine($@"
-==================================
-          ORDER CONFIRMED
-==================================
-Order ID: {order.OrderId}
-Customer: {order.UserName}
-Delivery Address: {order.DeliveryAddress}
-Delivery Time: {order.DeliveryTime}
-Order Date: {order.OrderDate}
-
-Total Amount: ₹{order.TotalAmount}
-==================================");
-
-            ConsoleHelper.CleanConsole();
+            else
+            {
+                ConsoleHelper.WriteErrorMessage($"\n{result}\n");
+            }
         }
     }
 }
