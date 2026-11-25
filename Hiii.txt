@@ -1,20 +1,77 @@
+/// <summary>
+/// Displays all products and allows the admin to update stock using the serial number.
+/// </summary>
+private void UpdateStock()
+{
+    List<Product> products = _adminServices.GetAllProducts();
 
-            string deliveryDate;
+    if (products.Count == 0)
+    {
+        ConsoleHelper.WriteErrorMessage("\nNo products available.\n");
+        return;
+    }
 
-            while (true)
-            {
-                Console.Write("\nEnter delivery date (dd-MM-yyyy): ");
-                deliveryDate = Console.ReadLine() ?? string.Empty;
+    Console.WriteLine("\n========== PRODUCT STOCK ==========\n");
+    Console.WriteLine("{0,-10} {1,-25} {2,-15}", "S.No", "Product Name", "Available Stock");
+    Console.WriteLine("--------------------------------------------------");
 
-                if (DateOnly.TryParseExact(
-                    deliveryDate,
-                    "dd-MM-yyyy",
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.None,
-                    out DateOnly selectedDate) && selectedDate >= DateOnly.FromDateTime(DateTime.Today))
-                {
-                    break;
-                }
+    for (int i = 0; i < products.Count; i++)
+    {
+        Console.WriteLine("{0,-10} {1,-25} {2,-15}",
+            i + 1,
+            products[i].Name,
+            products[i].Quantity);
+    }
 
-                ConsoleHelper.WriteErrorMessage("\nEnter a valid delivery date in dd-MM-yyyy format. Past dates are not allowed.\n");
-            }
+    Console.WriteLine("\nEnter the serial number of the product to update:");
+
+    int serialNumber;
+
+    while (!int.TryParse(Console.ReadLine(), out serialNumber) ||
+           serialNumber < 1 ||
+           serialNumber > products.Count)
+    {
+        ConsoleHelper.WriteErrorMessage("\nEnter a valid serial number.\n");
+        Console.Write("Enter serial number: ");
+    }
+
+    Product selectedProduct = products[serialNumber - 1];
+
+    int quantity;
+
+    Console.Write($"\nEnter the new stock quantity for {selectedProduct.Name}: ");
+
+    while (!int.TryParse(Console.ReadLine(), out quantity) || quantity < 0)
+    {
+        ConsoleHelper.WriteErrorMessage("\nEnter a valid stock quantity.\n");
+        Console.Write("Enter new stock quantity: ");
+    }
+
+    _adminServices.UpdateProductStock(selectedProduct.Name, quantity);
+
+    ConsoleHelper.WriteSuccessMessage(
+        $"\nStock updated successfully for {selectedProduct.Name}.\n");
+}
+
+
+
+
+
+
+
+
+
+
+
+/// <summary>
+/// Gets all available products.
+/// </summary>
+/// <returns>List of all products.</returns>
+public List<Product> GetAllProducts()
+{
+    return _productRepository.GetAllProducts();
+}
+
+
+using GroceryShopApp.Model;
+using System.Collections.Generic;
