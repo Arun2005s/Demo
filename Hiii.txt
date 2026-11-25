@@ -1,55 +1,112 @@
 
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using GroceryShopApp.Model;
-using GroceryShopApp.Repository;
 
-namespace GroceryShopApp.Services
+namespace GroceryShopApp.Repository
 {
     /// <summary>
-    /// Handles the business logics for the products.
+    /// Handles the storage and retrieval of cart data to and from files.
     /// </summary>
-    internal class ProductServices
+    internal class CartRepository
     {
-        private readonly ProductRepository _productRepository;
+        private readonly List<Cart> _carts = new List<Cart>();
+        private readonly string _filePath;
+
+        private readonly JsonSerializerOptions _options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() },
+        };
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ProductServices"/> class.
+        /// Initializes a new instance of the <see cref="CartRepository"/> class.
         /// </summary>
-        /// <param name="productRepository">Repository of the products.</param>
-        public ProductServices(ProductRepository productRepository)
+        /// <param name="filePath">Path where the cart data-file is located.</param>
+        public CartRepository(string filePath)
         {
-            this._productRepository = productRepository;
+            this._filePath = filePath;
+            this.LoadAll();
         }
 
         /// <summary>
-        /// Retrieves the list of products from a particular category.
+        /// Retrieves all cart products of a particular user.
         /// </summary>
-        /// <param name="category">Category of the product.</param>
-        /// <returns>Returns the list of product of selected category.</returns>
-        internal List<Product> GetProductsByCategory(Categories category)
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of cart products.</returns>
+        internal List<Cart> GetCart(string userName)
         {
-            List<Product> products = this._productRepository.GetAllProducts();
-            return products.Where(product => product.Category == category).ToList();
+            return this._carts.Where(cart => cart.UserName == userName).ToList();
         }
 
         /// <summary>
-        /// Handles the searching of products and returns the selected product.
+        /// Adds a product to the user's cart or updates its quantity.
         /// </summary>
-        /// <param name="category">Category of the product to be found.</param>
-        /// <param name="searchName">Name of the product to be found.</param>
-        /// <returns>Returns the selected product.</returns>
-        internal List<Product> SearchProducts(Categories category, string searchName)
+        /// <param name="cart">Cart details.</param>
+        internal void AddToCart(Cart cart)
         {
-            List<Product> products = this.GetProductsByCategory(category);
-            return products.Where(product => product.Name.Contains(searchName, StringComparison.OrdinalIgnoreCase)).ToList();
+            Cart? existingCart = this._carts.FirstOrDefault(
+                item => item.UserName == cart.UserName && item.Product.Name == cart.Product.Name);
+
+            if (existingCart != null)
+            {
+                existingCart.CartQuantity = cart.CartQuantity;
+                existingCart.Product = cart.Product;
+            }
+            else
+            {
+                this._carts.Add(cart);
+            }
+
+            this.WriteAll();
         }
 
         /// <summary>
-        /// Retrieves all products from the repository.
+        /// Removes all cart products of a particular user.
         /// </summary>
-        /// <returns>List of all products.</returns>
-        internal List<Product> GetAllProducts()
+        /// <param name="userName">Username of the user.</param>
+        internal void RemoveCart(string userName)
         {
-            return this._productRepository.GetAllProducts();
+            this._carts.RemoveAll(cart => cart.UserName == userName);
+            this.WriteAll();
+        }
+
+        /// <summary>
+        /// Removes selected products from the user's cart.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productNames">Names of products to be removed.</param>
+        internal void RemoveCartItems(string userName, List<string> productNames)
+        {
+            this._carts.RemoveAll(cart =>
+                cart.UserName == userName &&
+                productNames.Contains(cart.Product.Name, StringComparer.OrdinalIgnoreCase));
+
+            this.WriteAll();
+        }
+
+        private void WriteAll()
+        {
+            string fileData = JsonSerializer.Serialize(this._carts, this._options);
+            File.WriteAllText(this._filePath, fileData);
+        }
+
+        private void LoadAll()
+        {
+            if (!File.Exists(this._filePath))
+            {
+                this.WriteAll();
+                return;
+            }
+
+            string fileData = File.ReadAllText(this._filePath);
+            if (string.IsNullOrWhiteSpace(fileData))
+            {
+                return;
+            }
+
+            List<Cart> carts = JsonSerializer.Deserialize<List<Cart>>(fileData, this._options) ?? new List<Cart>();
+            this._carts.AddRange(carts);
         }
     }
 }
