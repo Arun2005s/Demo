@@ -1,197 +1,79 @@
 
+using System.Security.Cryptography;
+using System.Text;
 using GroceryShopApp.Model;
 using GroceryShopApp.Repository;
 
 namespace GroceryShopApp.Services
 {
     /// <summary>
-    /// Handles the business logics for cart and checkout operations.
+    /// Handles the business logics for the admin.
     /// </summary>
-    internal class CartServices
+    internal class AdminServices
     {
-        private readonly CartRepository _cartRepository;
+        private readonly UserRepository _userRepository;
         private readonly ProductRepository _productRepository;
         private readonly OrderRepository _orderRepository;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="CartServices"/> class.
+        /// Initializes a new instance of the <see cref="AdminServices"/> class.
         /// </summary>
-        /// <param name="cartRepository">Repository of the cart.</param>
-        /// <param name="productRepository">Repository of the products.</param>
-        /// <param name="orderRepository">Repository of the orders.</param>
-        public CartServices(CartRepository cartRepository, ProductRepository productRepository, OrderRepository orderRepository)
+        /// <param name="userRepository">Repository of users.</param>
+        /// <param name="productRepository">Repository of products.</param>
+        /// <param name="orderRepository">Repository of orders.</param>
+        public AdminServices(UserRepository userRepository, ProductRepository productRepository, OrderRepository orderRepository)
         {
-            this._cartRepository = cartRepository;
+            this._userRepository = userRepository;
             this._productRepository = productRepository;
             this._orderRepository = orderRepository;
         }
 
         /// <summary>
-        /// Adds a product to the user's cart.
+        /// Checks whether the user is an admin or not.
         /// </summary>
-        /// <param name="userName">Username of the user.</param>
+        /// <param name="userName">Username of admin.</param>
+        /// <param name="password">Password of admin.</param>
+        /// <returns>Returns whether the user is admin or not.</returns>
+        internal bool IsAdmin(string userName, string password)
+        {
+            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(password));
+            string hashedPassword = Convert.ToHexString(hash).ToLowerInvariant();
+
+            return this._userRepository.IsUserAdmin(userName, hashedPassword);
+        }
+
+        /// <summary>
+        /// Retrieves all the customer orders.
+        /// </summary>
+        /// <returns>List of all orders.</returns>
+        internal List<Order> GetAllOrders()
+        {
+            return this._orderRepository.GetAllOrders();
+        }
+
+        /// <summary>
+        /// Retrieves products whose stock is low.
+        /// </summary>
+        /// <returns>List of low-stock products.</returns>
+        internal List<Product> GetLowStockProducts()
+        {
+            return this._productRepository.GetLowStockProducts();
+        }
+
+        /// <summary>
+        /// Updates the stock quantity of a product.
+        /// </summary>
         /// <param name="productName">Name of the product.</param>
-        /// <param name="quantity">Quantity to be added.</param>
-        /// <returns>Returns whether the product was added or not.</returns>
-        internal string AddToCart(string userName, string productName, int quantity)
+        /// <param name="quantity">New stock quantity.</param>
+        /// <returns>Returns whether the stock was updated or not.</returns>
+        internal bool UpdateProductStock(string productName, int quantity)
         {
-            if (quantity <= 0)
+            if (string.IsNullOrWhiteSpace(productName) || quantity < 0)
             {
-                return "Quantity must be greater than zero.";
+                return false;
             }
 
-            Product? product = this._productRepository.GetAllProducts().FirstOrDefault(
-                item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
-
-            if (product == null)
-            {
-                return "Product not found.";
-            }
-
-            if (product.Quantity == 0)
-            {
-                return "Product is out of stock.";
-            }
-
-            Cart? existingCart = this._cartRepository.GetCart(userName).FirstOrDefault(
-                item => item.Product.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
-
-            int cartQuantity = quantity;
-
-            if (existingCart != null)
-            {
-                cartQuantity += existingCart.CartQuantity;
-            }
-
-            if (cartQuantity > product.Quantity)
-            {
-                return $"Only {product.Quantity} quantity is available.";
-            }
-
-            Cart cart = new Cart
-            {
-                UserName = userName,
-                Product = product,
-                CartQuantity = cartQuantity,
-            };
-
-            this._cartRepository.AddToCart(cart);
-            return "Product added to cart successfully.";
-        }
-
-        /// <summary>
-        /// Retrieves all products in the user's cart.
-        /// </summary>
-        /// <param name="userName">Username of the user.</param>
-        /// <returns>List of cart products.</returns>
-        internal List<Cart> GetCart(string userName)
-        {
-            return this._cartRepository.GetCart(userName);
-        }
-
-        /// <summary>
-        /// Calculates the total amount of the user's cart.
-        /// </summary>
-        /// <param name="userName">Username of the user.</param>
-        /// <returns>Total cart amount.</returns>
-        internal decimal GetCartTotal(string userName)
-        {
-            List<Cart> carts = this.GetCart(userName);
-            decimal totalAmount = 0;
-
-            foreach (Cart cart in carts)
-            {
-                totalAmount += cart.Product.Price * cart.CartQuantity;
-            }
-
-            return totalAmount;
-        }
-
-        /// <summary>
-        /// Clears all products from the user's cart.
-        /// </summary>
-        /// <param name="userName">Username of the user.</param>
-        internal void ClearCart(string userName)
-        {
-            this._cartRepository.RemoveCart(userName);
-        }
-
-        /// <summary>
-        /// Retrieves the order history of a particular user.
-        /// </summary>
-        /// <param name="userName">Username of the user.</param>
-        /// <returns>List of user orders.</returns>
-        internal List<Order> GetUserOrders(string userName)
-        {
-            return this._orderRepository.GetUserOrders(userName);
-        }
-
-        /// <summary>
-        /// Processes the checkout of selected products from the user's cart.
-        /// </summary>
-        /// <param name="userName">Username of the user.</param>
-        /// <param name="deliveryAddress">Delivery address.</param>
-        /// <param name="deliveryDate">Delivery date.</param>
-        /// <param name="deliveryTime">Delivery time slot.</param>
-        /// <param name="productNames">Names of products to purchase.</param>
-        /// <returns>Returns the order after successful checkout.</returns>
-        internal Order? Checkout(string userName, string deliveryAddress, string deliveryDate, string deliveryTime, List<string> productNames)
-        {
-            List<Cart> carts = this.GetCart(userName).Where(
-                cart => productNames.Contains(cart.Product.Name, StringComparer.OrdinalIgnoreCase)).ToList();
-
-            if (carts.Count == 0)
-            {
-                return null;
-            }
-
-            List<Product> products = this._productRepository.GetAllProducts();
-
-            foreach (Cart cart in carts)
-            {
-                Product? product = products.FirstOrDefault(
-                    item => item.Name.Equals(cart.Product.Name, StringComparison.OrdinalIgnoreCase));
-
-                if (product == null || product.Quantity < cart.CartQuantity)
-                {
-                    return null;
-                }
-            }
-
-            Order order = new Order
-            {
-                OrderId = this._orderRepository.GetAllOrders().Select(item => item.OrderId).DefaultIfEmpty(0).Max() + 1,
-                UserName = userName,
-                DeliveryAddress = deliveryAddress,
-                DeliveryDate = deliveryDate,
-                DeliveryTime = deliveryTime,
-                OrderDate = DateTime.Now,
-                TotalAmount = 0,
-            };
-
-            foreach (Cart cart in carts)
-            {
-                OrderItem orderItem = new OrderItem
-                {
-                    ProductName = cart.Product.Name,
-                    Price = cart.Product.Price,
-                    Quantity = cart.CartQuantity,
-                    SubTotal = cart.Product.Price * cart.CartQuantity,
-                };
-
-                order.Items.Add(orderItem);
-                order.TotalAmount += orderItem.SubTotal;
-            }
-
-            foreach (Cart cart in carts)
-            {
-                this._productRepository.UpdateProductStock(cart.Product.Name, cart.CartQuantity);
-            }
-
-            this._orderRepository.AddOrder(order);
-            this._cartRepository.RemoveCartItems(userName, productNames);
-
-            return order;
+            return this._productRepository.SetProductStock(productName.Trim(), quantity);
         }
     }
 }
