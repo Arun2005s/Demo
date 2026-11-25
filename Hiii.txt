@@ -1,162 +1,87 @@
 
-using GroceryShopApp.Model;
-using GroceryShopApp.Services;
-
 namespace GroceryShopApp.View
 {
     /// <summary>
-    /// Performs the view level operations for the wishlist.
+    /// Handles the main menu logics for redirecting the user.
     /// </summary>
-    internal class WishlistView
+    internal class MainMenu
     {
-        private readonly WishlistServices _wishlistServices;
-        private readonly CartServices _cartServices;
+        private readonly ProductView _productView;
         private readonly CartView _cartView;
+        private readonly WishlistView _wishlistView;
+
+        private string _currentUser;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="WishlistView"/> class.
+        /// Initializes a new instance of the <see cref="MainMenu"/> class.
         /// </summary>
-        /// <param name="wishlistServices">Services of the wishlist.</param>
-        /// <param name="cartServices">Services of the cart.</param>
-        /// <param name="cartView">View operations of the cart.</param>
-        public WishlistView(WishlistServices wishlistServices, CartServices cartServices, CartView cartView)
+        /// <param name="productView">View level operation of the product.</param>
+        /// <param name="cartView">View level operation of the cart.</param>
+        /// <param name="wishlistView">View level operation of the wishlist.</param>
+        public MainMenu(ProductView productView, CartView cartView, WishlistView wishlistView)
         {
-            this._wishlistServices = wishlistServices;
-            this._cartServices = cartServices;
+            this._currentUser = string.Empty;
+            this._productView = productView;
             this._cartView = cartView;
+            this._wishlistView = wishlistView;
         }
 
         /// <summary>
-        /// Displays the wishlist products of the current user.
+        /// Assigns the current user for session handling.
         /// </summary>
-        /// <param name="userName">Username of the current user.</param>
-        internal void DisplayWishlist(string userName)
+        /// <param name="userName">Unique username of the user.</param>
+        public void AssignCurrentUser(string userName)
+        {
+            this._currentUser = userName;
+        }
+
+        /// <summary>
+        /// Displays the menu options for redirecting.
+        /// </summary>
+        internal void MenuOptions()
         {
             while (true)
             {
-                List<Cart> wishlists = this._wishlistServices.GetWishlist(userName);
-
-                Console.WriteLine(@"
+                Console.Write($@"
 ==================================
-             WISHLIST
-==================================");
-
-                if (wishlists.Count == 0)
-                {
-                    ConsoleHelper.WriteErrorMessage("\nYour wishlist is empty.\n");
-                    ConsoleHelper.CleanConsole();
-                    return;
-                }
-
-                for (int i = 0; i < wishlists.Count; i++)
-                {
-                    Cart item = wishlists[i];
-
-                    Console.WriteLine($@"
-{i + 1}. Product: {item.Product.Name}
-   Price: ₹{item.Product.Price}
-   Stock: {item.Product.Quantity}");
-                }
-
-                Console.Write(@"
-[P]urchase Product
-[R]emove Product
-[B]ack to Main Menu
+            MAIN MENU
+==================================
+[P]roducts
+[C]art Items
+[T]rack Order
+[W]ishlist
+[L]og out
 
 Enter Choice: ");
 
-                ConsoleKey choice = Console.ReadKey().Key;
+                ConsoleKey userChoice = Console.ReadKey().Key;
                 Console.Clear();
 
-                switch (choice)
+                switch (userChoice)
                 {
                     case ConsoleKey.P:
-                        this.PurchaseWishlistProduct(userName, wishlists);
+                        this._productView.DisplayProductMenu(this._currentUser);
                         break;
-                    case ConsoleKey.R:
-                        this.RemoveWishlistProduct(userName, wishlists);
+                    case ConsoleKey.C:
+                        this._cartView.DisplayCart(this._currentUser);
                         break;
-                    case ConsoleKey.B:
+                    case ConsoleKey.T:
+                        this._cartView.DisplayOrderHistory(this._currentUser);
+                        break;
+                    case ConsoleKey.W:
+                        this._wishlistView.DisplayWishlist(this._currentUser);
+                        break;
+                    case ConsoleKey.L:
+                        this._currentUser = string.Empty;
+                        ConsoleHelper.WriteColored("\nLogging out...", ConsoleColor.Yellow);
+                        Thread.Sleep(1000);
+                        Console.Clear();
                         return;
                     default:
                         ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
                         break;
                 }
             }
-        }
-
-        /// <summary>
-        /// Purchases a selected product from the wishlist.
-        /// </summary>
-        /// <param name="userName">Username of the current user.</param>
-        /// <param name="wishlists">Products in the wishlist.</param>
-        private void PurchaseWishlistProduct(string userName, List<Cart> wishlists)
-        {
-            Console.Write("\nEnter product number: ");
-
-            if (!int.TryParse(Console.ReadLine(), out int productNumber) ||
-                productNumber < 1 || productNumber > wishlists.Count)
-            {
-                ConsoleHelper.WriteErrorMessage("\nInvalid product selection.\n");
-                return;
-            }
-
-            Product product = wishlists[productNumber - 1].Product;
-
-            if (product.Quantity <= 0)
-            {
-                ConsoleHelper.WriteErrorMessage("\nProduct is out of stock.\n");
-                return;
-            }
-
-            Console.Write("\nEnter quantity: ");
-
-            if (!int.TryParse(Console.ReadLine(), out int quantity) || quantity <= 0)
-            {
-                ConsoleHelper.WriteErrorMessage("\nInvalid quantity.\n");
-                return;
-            }
-
-            string result = this._cartServices.AddToCart(userName, product.Name, quantity);
-
-            if (result != "Product added to cart successfully.")
-            {
-                ConsoleHelper.WriteErrorMessage($"\n{result}\n");
-                return;
-            }
-
-            Console.Write("\nDo you want to purchase now? [Y/N]: ");
-
-            if (Console.ReadKey().Key == ConsoleKey.Y)
-            {
-                this._cartView.Checkout(userName, new List<string> { product.Name });
-            }
-            else
-            {
-                ConsoleHelper.WriteSuccessMessage("\nProduct added to cart successfully.\n");
-            }
-        }
-
-        /// <summary>
-        /// Removes a selected product from the wishlist.
-        /// </summary>
-        /// <param name="userName">Username of the current user.</param>
-        /// <param name="wishlists">Products in the wishlist.</param>
-        private void RemoveWishlistProduct(string userName, List<Cart> wishlists)
-        {
-            Console.Write("\nEnter product number to remove: ");
-
-            if (!int.TryParse(Console.ReadLine(), out int productNumber) ||
-                productNumber < 1 || productNumber > wishlists.Count)
-            {
-                ConsoleHelper.WriteErrorMessage("\nInvalid product selection.\n");
-                return;
-            }
-
-            string productName = wishlists[productNumber - 1].Product.Name;
-
-            this._wishlistServices.RemoveFromWishlist(userName, productName);
-            ConsoleHelper.WriteSuccessMessage("\nProduct removed from wishlist.\n");
         }
     }
 }
