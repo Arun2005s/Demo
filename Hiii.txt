@@ -1,79 +1,342 @@
 
 using GroceryShopApp.Model;
-using GroceryShopApp.Repository;
+using GroceryShopApp.Services;
 
-namespace GroceryShopApp.Services
+namespace GroceryShopApp.View
 {
     /// <summary>
-    /// Handles the business logics for the wishlist.
+    /// Performs the view level operations for cart and checkout.
     /// </summary>
-    internal class WishlistServices
+    internal class CartView
     {
-        private readonly WishlistRepository _wishlistRepository;
-        private readonly ProductRepository _productRepository;
+        private readonly CartServices _cartServices;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="WishlistServices"/> class.
+        /// Initializes a new instance of the <see cref="CartView"/> class.
         /// </summary>
-        /// <param name="wishlistRepository">Repository of the wishlist.</param>
-        /// <param name="productRepository">Repository of the products.</param>
-        public WishlistServices(WishlistRepository wishlistRepository, ProductRepository productRepository)
+        /// <param name="cartServices">Services of the cart.</param>
+        public CartView(CartServices cartServices)
         {
-            this._wishlistRepository = wishlistRepository;
-            this._productRepository = productRepository;
+            this._cartServices = cartServices;
         }
 
         /// <summary>
-        /// Adds a product to the user's wishlist.
+        /// Displays the cart products of the current user.
         /// </summary>
         /// <param name="userName">Username of the user.</param>
-        /// <param name="productName">Name of the product.</param>
-        /// <returns>Returns the result of the wishlist operation.</returns>
-        internal string AddToWishlist(string userName, string productName)
+        internal void DisplayCart(string userName)
         {
-            Product? product = this._productRepository.GetAllProducts().FirstOrDefault(
-                item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
-
-            if (product == null)
+            while (true)
             {
-                return "Product not found.";
+                List<Cart> carts = this._cartServices.GetCart(userName);
+
+                Console.WriteLine(@"
+==================================
+            YOUR CART
+==================================");
+
+                if (carts.Count == 0)
+                {
+                    ConsoleHelper.WriteErrorMessage("\nYour cart is empty.\n");
+                    ConsoleHelper.CleanConsole();
+                    return;
+                }
+
+                for (int i = 0; i < carts.Count; i++)
+                {
+                    Cart cart = carts[i];
+
+                    Console.WriteLine($@"
+{i + 1}. Product: {cart.Product.Name}
+   Price: ₹{cart.Product.Price}
+   Quantity: {cart.CartQuantity}
+   Subtotal: ₹{cart.Product.Price * cart.CartQuantity}");
+                }
+
+                Console.WriteLine($@"
+==================================
+Total Amount: ₹{this._cartServices.GetCartTotal(userName)}
+==================================");
+
+                Console.Write(@"
+[A] Purchase All
+[S]elect Individual Items
+[C]lear Cart
+[B]ack to Main Menu
+
+Enter Choice: ");
+
+                ConsoleKey userChoice = Console.ReadKey().Key;
+                Console.Clear();
+
+                switch (userChoice)
+                {
+                    case ConsoleKey.A:
+                        this.Checkout(userName, carts.Select(item => item.Product.Name).ToList());
+                        break;
+                    case ConsoleKey.S:
+                        this.SelectCartItems(userName, carts);
+                        break;
+                    case ConsoleKey.C:
+                        Console.Write("Are you sure you want to clear your cart? [Y/N]: ");
+
+                        if (Console.ReadKey().Key == ConsoleKey.Y)
+                        {
+                            this._cartServices.ClearCart(userName);
+                            ConsoleHelper.WriteSuccessMessage("\nCart cleared successfully.\n");
+                        }
+                        else
+                        {
+                            Console.WriteLine("\nCart clearing cancelled.\n");
+                        }
+
+                        ConsoleHelper.CleanConsole();
+                        break;
+                    case ConsoleKey.B:
+                        return;
+                    default:
+                        ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
+                        ConsoleHelper.CleanConsole();
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Allows the user to select individual products from the cart.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="carts">Products in the cart.</param>
+        private void SelectCartItems(string userName, List<Cart> carts)
+        {
+            Console.Write("\nEnter product numbers separated by commas (Example: 1,3): ");
+            string[] selections = (Console.ReadLine() ?? string.Empty).Split(',');
+
+            List<string> selectedProducts = new List<string>();
+
+            foreach (string selection in selections)
+            {
+                if (!int.TryParse(selection.Trim(), out int productNumber) ||
+                    productNumber < 1 || productNumber > carts.Count)
+                {
+                    ConsoleHelper.WriteErrorMessage("\nInvalid product selection.\n");
+                    ConsoleHelper.CleanConsole();
+                    return;
+                }
+
+                string productName = carts[productNumber - 1].Product.Name;
+
+                if (!selectedProducts.Contains(productName))
+                {
+                    selectedProducts.Add(productName);
+                }
             }
 
-            if (this._wishlistRepository.GetWishlist(userName).Any(
-                item => item.Product.Name.Equals(productName, StringComparison.OrdinalIgnoreCase)))
+            if (selectedProducts.Count == 0)
             {
-                return "Product already exists in wishlist.";
+                ConsoleHelper.WriteErrorMessage("\nNo products selected.\n");
+                ConsoleHelper.CleanConsole();
+                return;
             }
 
-            Cart cart = new Cart
+            this.Checkout(userName, selectedProducts);
+        }
+
+        /// <summary>
+        /// Handles the checkout process and retrieves delivery details.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productNames">Names of products to purchase.</param>
+        internal void Checkout(string userName, List<string> productNames)
+        {
+            string deliveryAddress;
+
+            while (true)
             {
-                UserName = userName,
-                Product = product,
-                CartQuantity = 1,
-            };
+                Console.Write("\nEnter delivery address: ");
+                deliveryAddress = Console.ReadLine() ?? string.Empty;
 
-            this._wishlistRepository.AddToWishlist(cart);
-            return "Product added to wishlist successfully.";
+                string validatorMessage = Validator.ValidateDeliveryAddress(deliveryAddress);
+
+                if (validatorMessage != "passed")
+                {
+                    ConsoleHelper.WriteErrorMessage($"\n{validatorMessage}\n");
+                    continue;
+                }
+
+                deliveryAddress = deliveryAddress.Trim();
+                break;
+            }
+
+            string deliveryDate;
+
+            while (true)
+            {
+                Console.Write("\nEnter delivery date (yyyy-MM-dd): ");
+                deliveryDate = Console.ReadLine() ?? string.Empty;
+
+                if (DateOnly.TryParseExact(
+                    deliveryDate,
+                    "yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None,
+                    out DateOnly selectedDate) && selectedDate >= DateOnly.FromDateTime(DateTime.Today))
+                {
+                    break;
+                }
+
+                ConsoleHelper.WriteErrorMessage("\nEnter a valid delivery date. Past dates are not allowed.\n");
+            }
+
+            string deliveryTime;
+
+            while (true)
+            {
+                Console.Write(@"
+Select Delivery Time:
+[1] 8 AM - 12 PM
+[2] 12 PM - 4 PM
+[3] 4 PM - 8 PM
+
+Enter Choice: ");
+
+                string timeChoice = Console.ReadLine() ?? string.Empty;
+
+                switch (timeChoice)
+                {
+                    case "1":
+                        deliveryTime = "8 AM - 12 PM";
+                        break;
+                    case "2":
+                        deliveryTime = "12 PM - 4 PM";
+                        break;
+                    case "3":
+                        deliveryTime = "4 PM - 8 PM";
+                        break;
+                    default:
+                        ConsoleHelper.WriteErrorMessage("\nInvalid time slot.\n");
+                        continue;
+                }
+
+                break;
+            }
+
+            List<Cart> carts = this._cartServices.GetCart(userName).Where(
+                item => productNames.Contains(item.Product.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+
+            decimal totalAmount = carts.Sum(item => item.Product.Price * item.CartQuantity);
+
+            Console.WriteLine(@"
+==================================
+           ORDER SUMMARY
+==================================");
+
+            foreach (Cart cart in carts)
+            {
+                Console.WriteLine($@"
+Product: {cart.Product.Name}
+Price: ₹{cart.Product.Price}
+Quantity: {cart.CartQuantity}
+Subtotal: ₹{cart.Product.Price * cart.CartQuantity}");
+            }
+
+            Console.WriteLine($@"
+Delivery Address: {deliveryAddress}
+Delivery Date: {deliveryDate}
+Delivery Time: {deliveryTime}
+
+==================================
+Total Amount: ₹{totalAmount}
+==================================");
+
+            Console.Write("\nConfirm Order? [Y/N]: ");
+
+            if (Console.ReadKey().Key != ConsoleKey.Y)
+            {
+                ConsoleHelper.WriteErrorMessage("\nOrder cancelled. Your cart has been retained.\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            Order? order = this._cartServices.Checkout(
+                userName,
+                deliveryAddress,
+                deliveryDate,
+                deliveryTime,
+                productNames);
+
+            if (order == null)
+            {
+                ConsoleHelper.WriteErrorMessage(
+                    "\nCheckout failed. Product stock may have changed. Please check your cart.\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            ConsoleHelper.WriteSuccessMessage("\nOrder placed successfully!\n");
+
+            Console.WriteLine($@"
+==================================
+          ORDER CONFIRMED
+==================================
+Order ID: {order.OrderId}
+Customer: {order.UserName}
+Delivery Address: {order.DeliveryAddress}
+Delivery Date: {order.DeliveryDate}
+Delivery Time: {order.DeliveryTime}
+Order Date: {order.OrderDate}
+
+Total Amount: ₹{order.TotalAmount}
+==================================");
+
+            ConsoleHelper.CleanConsole();
         }
 
         /// <summary>
-        /// Retrieves all products in the user's wishlist.
+        /// Displays the order history of the current user.
         /// </summary>
         /// <param name="userName">Username of the user.</param>
-        /// <returns>List of wishlist products.</returns>
-        internal List<Cart> GetWishlist(string userName)
+        internal void DisplayOrderHistory(string userName)
         {
-            return this._wishlistRepository.GetWishlist(userName);
-        }
+            List<Order> orders = this._cartServices.GetUserOrders(userName);
 
-        /// <summary>
-        /// Removes a product from the user's wishlist.
-        /// </summary>
-        /// <param name="userName">Username of the user.</param>
-        /// <param name="productName">Name of the product.</param>
-        internal void RemoveFromWishlist(string userName, string productName)
-        {
-            this._wishlistRepository.RemoveFromWishlist(userName, productName);
+            Console.WriteLine(@"
+==================================
+           ORDER HISTORY
+==================================");
+
+            if (orders.Count == 0)
+            {
+                ConsoleHelper.WriteErrorMessage("\nNo previous orders found.\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            foreach (Order order in orders)
+            {
+                Console.WriteLine($@"
+==================================
+Order ID: {order.OrderId}
+Order Date: {order.OrderDate}
+Delivery Date: {order.DeliveryDate}
+Delivery Time: {order.DeliveryTime}
+Delivery Address: {order.DeliveryAddress}");
+
+                foreach (OrderItem item in order.Items)
+                {
+                    Console.WriteLine($@"
+Product: {item.ProductName}
+Price: ₹{item.Price}
+Quantity: {item.Quantity}
+Subtotal: ₹{item.SubTotal}");
+                }
+
+                Console.WriteLine($@"
+Total Amount: ₹{order.TotalAmount}
+==================================");
+            }
+
+            ConsoleHelper.CleanConsole();
         }
     }
 }
