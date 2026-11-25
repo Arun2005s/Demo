@@ -1,56 +1,49 @@
 
-namespace GroceryShopApp.View
+using GroceryShopApp.Repository;
+using GroceryShopApp.Services;
+using GroceryShopApp.View;
+
+namespace GroceryShopApp
 {
     /// <summary>
-    /// Handles the main menu logics for redirecting the user.
+    /// Entry point of the application.
     /// </summary>
-    internal class MainMenu
+    internal class Program
     {
-        private readonly ProductView _productView;
-        private readonly CartView _cartView;
-        private readonly WishlistView _wishlistView;
-
-        private string _currentUser;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="MainMenu"/> class.
-        /// </summary>
-        /// <param name="productView">View level operation of the product.</param>
-        /// <param name="cartView">View level operation of the cart.</param>
-        /// <param name="wishlistView">View level operation of the wishlist.</param>
-        public MainMenu(ProductView productView, CartView cartView, WishlistView wishlistView)
+        private static void Main(string[] args)
         {
-            this._currentUser = string.Empty;
-            this._productView = productView;
-            this._cartView = cartView;
-            this._wishlistView = wishlistView;
-        }
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-        /// <summary>
-        /// Assigns the current user for session handling.
-        /// </summary>
-        /// <param name="userName">Unique username of the user.</param>
-        public void AssignCurrentUser(string userName)
-        {
-            this._currentUser = userName;
-        }
+            UserRepository userRepository = new UserRepository("Users.json");
+            ProductRepository productRepository = new ProductRepository("Products.json");
+            CartRepository cartRepository = new CartRepository("Carts.json");
+            OrderRepository orderRepository = new OrderRepository("Orders.json");
+            WishlistRepository wishlistRepository = new WishlistRepository("Wishlists.json");
 
-        /// <summary>
-        /// Displays the menu options for redirecting.
-        /// </summary>
-        internal void MenuOptions()
-        {
+            UserServices userServices = new UserServices(userRepository);
+            ProductServices productServices = new ProductServices(productRepository);
+            CartServices cartServices = new CartServices(cartRepository, productRepository, orderRepository);
+            WishlistServices wishlistServices = new WishlistServices(wishlistRepository, productRepository);
+            AdminServices adminServices = new AdminServices(userRepository, productRepository, orderRepository);
+
+            CartView cartView = new CartView(cartServices);
+            WishlistView wishlistView = new WishlistView(wishlistServices, cartServices, cartView);
+            ProductView productView = new ProductView(productServices, cartServices, wishlistServices, cartView);
+
+            MainMenu mainMenu = new MainMenu(productView, cartView, wishlistView);
+            UserAuth userAuth = new UserAuth(userServices, mainMenu);
+            AdminLogin adminLogin = new AdminLogin(adminServices, userServices);
+
             while (true)
             {
                 Console.Write($@"
 ==================================
-            MAIN MENU
+         GROCERY SHOP APP
 ==================================
-[P]roducts
-[C]art Items
-[T]rack Order
-[W]ishlist
-[L]og out
+[L]ogIn
+[S]ignUp
+[A]dmin login
+[E]xit
 
 Enter Choice: ");
 
@@ -59,26 +52,21 @@ Enter Choice: ");
 
                 switch (userChoice)
                 {
-                    case ConsoleKey.P:
-                        this._productView.DisplayProductMenu(this._currentUser);
-                        break;
-                    case ConsoleKey.C:
-                        this._cartView.DisplayCart(this._currentUser);
-                        break;
-                    case ConsoleKey.T:
-                        this._cartView.DisplayOrderHistory(this._currentUser);
-                        break;
-                    case ConsoleKey.W:
-                        this._wishlistView.DisplayWishlist(this._currentUser);
+                    case ConsoleKey.S:
+                        userAuth.Register();
                         break;
                     case ConsoleKey.L:
-                        this._currentUser = string.Empty;
-                        ConsoleHelper.WriteColored("\nLogging out...", ConsoleColor.Yellow);
+                        userAuth.Login();
+                        break;
+                    case ConsoleKey.A:
+                        adminLogin.Login();
+                        break;
+                    case ConsoleKey.E:
+                        ConsoleHelper.WriteColored("\nExiting...", ConsoleColor.Cyan);
                         Thread.Sleep(1000);
-                        Console.Clear();
-                        return;
+                        Environment.Exit(0);
+                        break;
                     default:
-                        ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
                         break;
                 }
             }
