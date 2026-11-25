@@ -1,75 +1,20 @@
 
-using GroceryShopApp.Repository;
-using GroceryShopApp.Services;
-using GroceryShopApp.View;
-
-namespace GroceryShopApp
-{
-    /// <summary>
-    /// Entry point of the application.
-    /// </summary>
-    internal class Program
-    {
-        private static void Main(string[] args)
-        {
-            Console.OutputEncoding = System.Text.Encoding.UTF8;
-
-            UserRepository userRepository = new UserRepository("Users.json");
-            ProductRepository productRepository = new ProductRepository("Products.json");
-            CartRepository cartRepository = new CartRepository("Carts.json");
-            OrderRepository orderRepository = new OrderRepository("Orders.json");
-            WishlistRepository wishlistRepository = new WishlistRepository("Wishlists.json");
-
-            UserServices userServices = new UserServices(userRepository);
-            ProductServices productServices = new ProductServices(productRepository);
-            CartServices cartServices = new CartServices(cartRepository, productRepository, orderRepository);
-            WishlistServices wishlistServices = new WishlistServices(wishlistRepository, productRepository);
-            AdminServices adminServices = new AdminServices(userRepository, productRepository, orderRepository);
-
-            CartView cartView = new CartView(cartServices);
-            WishlistView wishlistView = new WishlistView(wishlistServices, cartServices, cartView);
-            ProductView productView = new ProductView(productServices, cartServices, wishlistServices, cartView);
-
-            MainMenu mainMenu = new MainMenu(productView, cartView, wishlistView);
-            UserAuth userAuth = new UserAuth(userServices, mainMenu);
-            AdminLogin adminLogin = new AdminLogin(adminServices, userServices);
+            string deliveryDate;
 
             while (true)
             {
-                Console.Write($@"
-==================================
-         GROCERY SHOP APP
-==================================
-[L]ogIn
-[S]ignUp
-[A]dmin login
-[E]xit
+                Console.Write("\nEnter delivery date (dd-MM-yyyy): ");
+                deliveryDate = Console.ReadLine() ?? string.Empty;
 
-Enter Choice: ");
-
-                ConsoleKey userChoice = Console.ReadKey().Key;
-                Console.Clear();
-
-                switch (userChoice)
+                if (DateOnly.TryParseExact(
+                    deliveryDate,
+                    "dd-MM-yyyy",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None,
+                    out DateOnly selectedDate) && selectedDate >= DateOnly.FromDateTime(DateTime.Today))
                 {
-                    case ConsoleKey.S:
-                        userAuth.Register();
-                        break;
-                    case ConsoleKey.L:
-                        userAuth.Login();
-                        break;
-                    case ConsoleKey.A:
-                        adminLogin.Login();
-                        break;
-                    case ConsoleKey.E:
-                        ConsoleHelper.WriteColored("\nExiting...", ConsoleColor.Cyan);
-                        Thread.Sleep(1000);
-                        Environment.Exit(0);
-                        break;
-                    default:
-                        break;
+                    break;
                 }
+
+                ConsoleHelper.WriteErrorMessage("\nEnter a valid delivery date in dd-MM-yyyy format. Past dates are not allowed.\n");
             }
-        }
-    }
-}
