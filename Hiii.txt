@@ -1,79 +1,294 @@
 
-using System.Security.Cryptography;
 using System.Text;
 using GroceryShopApp.Model;
-using GroceryShopApp.Repository;
+using GroceryShopApp.Services;
 
-namespace GroceryShopApp.Services
+namespace GroceryShopApp.View
 {
     /// <summary>
-    /// Handles the business logics for the admin.
+    /// Enables the admin to enter details to login.
     /// </summary>
-    internal class AdminServices
+    internal class AdminLogin
     {
-        private readonly UserRepository _userRepository;
-        private readonly ProductRepository _productRepository;
-        private readonly OrderRepository _orderRepository;
+        private readonly AdminServices _adminServices;
+        private readonly UserServices _userServices;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="AdminServices"/> class.
+        /// Initializes a new instance of the <see cref="AdminLogin"/> class.
         /// </summary>
-        /// <param name="userRepository">Repository of users.</param>
-        /// <param name="productRepository">Repository of products.</param>
-        /// <param name="orderRepository">Repository of orders.</param>
-        public AdminServices(UserRepository userRepository, ProductRepository productRepository, OrderRepository orderRepository)
+        /// <param name="adminServices">Services of admin.</param>
+        /// <param name="userServices">Services of user.</param>
+        public AdminLogin(AdminServices adminServices, UserServices userServices)
         {
-            this._userRepository = userRepository;
-            this._productRepository = productRepository;
-            this._orderRepository = orderRepository;
+            this._adminServices = adminServices;
+            this._userServices = userServices;
         }
 
         /// <summary>
-        /// Checks whether the user is an admin or not.
+        /// Asks the user for admin credentials to login.
         /// </summary>
-        /// <param name="userName">Username of admin.</param>
-        /// <param name="password">Password of admin.</param>
-        /// <returns>Returns whether the user is admin or not.</returns>
-        internal bool IsAdmin(string userName, string password)
+        internal void Login()
         {
-            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(password));
-            string hashedPassword = Convert.ToHexString(hash).ToLowerInvariant();
+            Console.Write(@"
+==================================
+          ADMIN LOG-IN
+==================================
+");
 
-            return this._userRepository.IsUserAdmin(userName, hashedPassword);
-        }
+            Console.Write("Enter admin user-name: ");
+            string? userName = Console.ReadLine();
 
-        /// <summary>
-        /// Retrieves all the customer orders.
-        /// </summary>
-        /// <returns>List of all orders.</returns>
-        internal List<Order> GetAllOrders()
-        {
-            return this._orderRepository.GetAllOrders();
-        }
+            Console.Write(@"Enter admin password [4-20 character with letter and digits]
+[Press TAB key to view/hide the password]: ");
+            string? password = this.ReadMaskedPassword();
 
-        /// <summary>
-        /// Retrieves products whose stock is low.
-        /// </summary>
-        /// <returns>List of low-stock products.</returns>
-        internal List<Product> GetLowStockProducts()
-        {
-            return this._productRepository.GetLowStockProducts();
-        }
+            string validatorMessage = Validator.ValidateLoginFields(userName, password);
 
-        /// <summary>
-        /// Updates the stock quantity of a product.
-        /// </summary>
-        /// <param name="productName">Name of the product.</param>
-        /// <param name="quantity">New stock quantity.</param>
-        /// <returns>Returns whether the stock was updated or not.</returns>
-        internal bool UpdateProductStock(string productName, int quantity)
-        {
-            if (string.IsNullOrWhiteSpace(productName) || quantity < 0)
+            if (validatorMessage != "passed")
             {
-                return false;
+                ConsoleHelper.WriteErrorMessage($"\n{validatorMessage}\n");
+                ConsoleHelper.CleanConsole();
+                return;
             }
 
-            return this._productRepository.SetProductStock(productName.Trim(), quantity);
+            if (this._adminServices.IsAdmin(userName!, password!))
+            {
+                ConsoleHelper.WriteSuccessMessage("\nWelcome! Admin\n");
+                this.DisplayLowStockProducts();
+                Thread.Sleep(1000);
+                this.AdminMenu();
+                return;
+            }
+
+            if (!this._userServices.IsUserAccountExists(userName!))
+            {
+                ConsoleHelper.WriteErrorMessage("\nUsername does not exists\n");
+            }
+            else if (!this._userServices.UserExists(userName!, password!))
+            {
+                ConsoleHelper.WriteErrorMessage("\nPassword is not valid\n");
+            }
+            else
+            {
+                ConsoleHelper.WriteErrorMessage("\nUser is not an admin\n");
+            }
+
+            ConsoleHelper.CleanConsole();
+        }
+
+        /// <summary>
+        /// Displays the products whose stock is low.
+        /// </summary>
+        private void DisplayLowStockProducts()
+        {
+            List<Product> products = this._adminServices.GetLowStockProducts();
+
+            if (products.Count == 0)
+            {
+                ConsoleHelper.WriteSuccessMessage("\nAll product stocks are sufficient.\n");
+                return;
+            }
+
+            ConsoleHelper.WriteErrorMessage(@"
+==================================
+        LOW STOCK ALERT
+==================================
+");
+
+            foreach (Product product in products)
+            {
+                ConsoleHelper.WriteErrorMessage(
+                    $"Product: {product.Name} | Remaining Stock: {product.Quantity}\n");
+            }
+
+            ConsoleHelper.WriteErrorMessage("==================================\n");
+        }
+
+        /// <summary>
+        /// Displays the menu options for the admin.
+        /// </summary>
+        internal void AdminMenu()
+        {
+            while (true)
+            {
+                Console.Write(@"
+==================================
+          ADMIN MENU
+==================================
+[V]iew Customer Orders
+[S]tock Management
+[L]ogout
+
+Enter Choice: ");
+
+                ConsoleKey userChoice = Console.ReadKey().Key;
+                Console.Clear();
+
+                switch (userChoice)
+                {
+                    case ConsoleKey.V:
+                        this.DisplayOrders();
+                        break;
+                    case ConsoleKey.S:
+                        this.UpdateStock();
+                        break;
+                    case ConsoleKey.L:
+                        ConsoleHelper.WriteColored("\nLogging out...", ConsoleColor.Yellow);
+                        Thread.Sleep(1000);
+                        Console.Clear();
+                        return;
+                    default:
+                        ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Allows the admin to update the stock quantity of a product.
+        /// </summary>
+        private void UpdateStock()
+        {
+            List<Product> products = this._adminServices.GetLowStockProducts();
+
+            Console.WriteLine(@"
+==================================
+         STOCK MANAGEMENT
+==================================");
+
+            List<Product> allProducts = new List<Product>();
+
+            // The low-stock list is displayed first.
+            foreach (Product product in products)
+            {
+                allProducts.Add(product);
+            }
+
+            // The admin can enter the product name directly.
+            Console.WriteLine("\nEnter the exact product name to update its stock.");
+            Console.Write("Product Name: ");
+            string productName = Console.ReadLine() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(productName))
+            {
+                ConsoleHelper.WriteErrorMessage("\nProduct name cannot be empty.\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            Console.Write("Enter new stock quantity: ");
+
+            if (!int.TryParse(Console.ReadLine(), out int quantity) || quantity < 0)
+            {
+                ConsoleHelper.WriteErrorMessage("\nStock quantity must be a non-negative number.\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            if (this._adminServices.UpdateProductStock(productName, quantity))
+            {
+                ConsoleHelper.WriteSuccessMessage("\nProduct stock updated successfully.\n");
+            }
+            else
+            {
+                ConsoleHelper.WriteErrorMessage("\nProduct not found or invalid stock quantity.\n");
+            }
+
+            ConsoleHelper.CleanConsole();
+        }
+
+        /// <summary>
+        /// Displays all customer orders.
+        /// </summary>
+        private void DisplayOrders()
+        {
+            List<Order> orders = this._adminServices.GetAllOrders();
+
+            Console.WriteLine(@"
+==================================
+        CUSTOMER ORDERS
+==================================");
+
+            if (orders.Count == 0)
+            {
+                ConsoleHelper.WriteErrorMessage("\nNo orders found.\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            foreach (Order order in orders)
+            {
+                Console.WriteLine($@"
+==================================
+Order ID: {order.OrderId}
+Customer: {order.UserName}
+Order Date: {order.OrderDate}
+Delivery Address: {order.DeliveryAddress}
+Delivery Date: {order.DeliveryDate}
+Delivery Time: {order.DeliveryTime}");
+
+                foreach (OrderItem item in order.Items)
+                {
+                    Console.WriteLine($@"
+Product: {item.ProductName}
+Price: ₹{item.Price}
+Quantity: {item.Quantity}
+Subtotal: ₹{item.SubTotal}");
+                }
+
+                Console.WriteLine($@"
+Total Amount: ₹{order.TotalAmount}
+==================================");
+            }
+
+            ConsoleHelper.CleanConsole();
+        }
+
+        /// <summary>
+        /// Reads password input from the console, allowing the user to toggle visibility using the Tab key.
+        /// </summary>
+        /// <returns>The plain-text password entered by the user.</returns>
+        private string ReadMaskedPassword()
+        {
+            StringBuilder password = new StringBuilder();
+            bool isHidden = true;
+
+            while (true)
+            {
+                ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
+
+                if (keyInfo.Key == ConsoleKey.Enter)
+                {
+                    Console.WriteLine();
+                    break;
+                }
+                else if (keyInfo.Key == ConsoleKey.Tab)
+                {
+                    isHidden = !isHidden;
+
+                    for (int i = 0; i < password.Length; i++)
+                    {
+                        Console.Write("\b \b");
+                    }
+
+                    Console.Write(isHidden ? new string('*', password.Length) : password.ToString());
+                }
+                else if (keyInfo.Key == ConsoleKey.Backspace)
+                {
+                    if (password.Length > 0)
+                    {
+                        password.Remove(password.Length - 1, 1);
+                        Console.Write("\b \b");
+                    }
+                }
+                else if (!char.IsControl(keyInfo.KeyChar))
+                {
+                    password.Append(keyInfo.KeyChar);
+                    Console.Write(isHidden ? '*' : keyInfo.KeyChar);
+                }
+            }
+
+            return password.ToString();
         }
     }
 }
