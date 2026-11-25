@@ -1,294 +1,96 @@
 
-using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using GroceryShopApp.Model;
-using GroceryShopApp.Services;
 
-namespace GroceryShopApp.View
+namespace GroceryShopApp.Repository
 {
     /// <summary>
-    /// Enables the admin to enter details to login.
+    /// Handles the storage and retrieval of wishlist data to and from files.
     /// </summary>
-    internal class AdminLogin
+    internal class WishlistRepository
     {
-        private readonly AdminServices _adminServices;
-        private readonly UserServices _userServices;
+        private readonly List<Cart> _wishlists = new List<Cart>();
+        private readonly string _filePath;
+
+        private readonly JsonSerializerOptions _options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() },
+        };
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="AdminLogin"/> class.
+        /// Initializes a new instance of the <see cref="WishlistRepository"/> class.
         /// </summary>
-        /// <param name="adminServices">Services of admin.</param>
-        /// <param name="userServices">Services of user.</param>
-        public AdminLogin(AdminServices adminServices, UserServices userServices)
+        /// <param name="filePath">Path where the wishlist data-file is located.</param>
+        public WishlistRepository(string filePath)
         {
-            this._adminServices = adminServices;
-            this._userServices = userServices;
+            this._filePath = filePath;
+            this.LoadAll();
         }
 
         /// <summary>
-        /// Asks the user for admin credentials to login.
+        /// Retrieves all wishlist products of a particular user.
         /// </summary>
-        internal void Login()
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of wishlist products.</returns>
+        internal List<Cart> GetWishlist(string userName)
         {
-            Console.Write(@"
-==================================
-          ADMIN LOG-IN
-==================================
-");
-
-            Console.Write("Enter admin user-name: ");
-            string? userName = Console.ReadLine();
-
-            Console.Write(@"Enter admin password [4-20 character with letter and digits]
-[Press TAB key to view/hide the password]: ");
-            string? password = this.ReadMaskedPassword();
-
-            string validatorMessage = Validator.ValidateLoginFields(userName, password);
-
-            if (validatorMessage != "passed")
-            {
-                ConsoleHelper.WriteErrorMessage($"\n{validatorMessage}\n");
-                ConsoleHelper.CleanConsole();
-                return;
-            }
-
-            if (this._adminServices.IsAdmin(userName!, password!))
-            {
-                ConsoleHelper.WriteSuccessMessage("\nWelcome! Admin\n");
-                this.DisplayLowStockProducts();
-                Thread.Sleep(1000);
-                this.AdminMenu();
-                return;
-            }
-
-            if (!this._userServices.IsUserAccountExists(userName!))
-            {
-                ConsoleHelper.WriteErrorMessage("\nUsername does not exists\n");
-            }
-            else if (!this._userServices.UserExists(userName!, password!))
-            {
-                ConsoleHelper.WriteErrorMessage("\nPassword is not valid\n");
-            }
-            else
-            {
-                ConsoleHelper.WriteErrorMessage("\nUser is not an admin\n");
-            }
-
-            ConsoleHelper.CleanConsole();
+            return this._wishlists.Where(item => item.UserName == userName).ToList();
         }
 
         /// <summary>
-        /// Displays the products whose stock is low.
+        /// Adds a product to the user's wishlist.
         /// </summary>
-        private void DisplayLowStockProducts()
+        /// <param name="cart">Wishlist product details.</param>
+        internal void AddToWishlist(Cart cart)
         {
-            List<Product> products = this._adminServices.GetLowStockProducts();
+            Cart? existingProduct = this._wishlists.FirstOrDefault(
+                item => item.UserName == cart.UserName && item.Product.Name == cart.Product.Name);
 
-            if (products.Count == 0)
+            if (existingProduct == null)
             {
-                ConsoleHelper.WriteSuccessMessage("\nAll product stocks are sufficient.\n");
-                return;
-            }
-
-            ConsoleHelper.WriteErrorMessage(@"
-==================================
-        LOW STOCK ALERT
-==================================
-");
-
-            foreach (Product product in products)
-            {
-                ConsoleHelper.WriteErrorMessage(
-                    $"Product: {product.Name} | Remaining Stock: {product.Quantity}\n");
-            }
-
-            ConsoleHelper.WriteErrorMessage("==================================\n");
-        }
-
-        /// <summary>
-        /// Displays the menu options for the admin.
-        /// </summary>
-        internal void AdminMenu()
-        {
-            while (true)
-            {
-                Console.Write(@"
-==================================
-          ADMIN MENU
-==================================
-[V]iew Customer Orders
-[S]tock Management
-[L]ogout
-
-Enter Choice: ");
-
-                ConsoleKey userChoice = Console.ReadKey().Key;
-                Console.Clear();
-
-                switch (userChoice)
-                {
-                    case ConsoleKey.V:
-                        this.DisplayOrders();
-                        break;
-                    case ConsoleKey.S:
-                        this.UpdateStock();
-                        break;
-                    case ConsoleKey.L:
-                        ConsoleHelper.WriteColored("\nLogging out...", ConsoleColor.Yellow);
-                        Thread.Sleep(1000);
-                        Console.Clear();
-                        return;
-                    default:
-                        ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
-                        break;
-                }
+                this._wishlists.Add(cart);
+                this.WriteAll();
             }
         }
 
         /// <summary>
-        /// Allows the admin to update the stock quantity of a product.
+        /// Removes a product from the user's wishlist.
         /// </summary>
-        private void UpdateStock()
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productName">Name of the product.</param>
+        internal void RemoveFromWishlist(string userName, string productName)
         {
-            List<Product> products = this._adminServices.GetLowStockProducts();
+            this._wishlists.RemoveAll(
+                item => item.UserName == userName && item.Product.Name == productName);
 
-            Console.WriteLine(@"
-==================================
-         STOCK MANAGEMENT
-==================================");
-
-            List<Product> allProducts = new List<Product>();
-
-            // The low-stock list is displayed first.
-            foreach (Product product in products)
-            {
-                allProducts.Add(product);
-            }
-
-            // The admin can enter the product name directly.
-            Console.WriteLine("\nEnter the exact product name to update its stock.");
-            Console.Write("Product Name: ");
-            string productName = Console.ReadLine() ?? string.Empty;
-
-            if (string.IsNullOrWhiteSpace(productName))
-            {
-                ConsoleHelper.WriteErrorMessage("\nProduct name cannot be empty.\n");
-                ConsoleHelper.CleanConsole();
-                return;
-            }
-
-            Console.Write("Enter new stock quantity: ");
-
-            if (!int.TryParse(Console.ReadLine(), out int quantity) || quantity < 0)
-            {
-                ConsoleHelper.WriteErrorMessage("\nStock quantity must be a non-negative number.\n");
-                ConsoleHelper.CleanConsole();
-                return;
-            }
-
-            if (this._adminServices.UpdateProductStock(productName, quantity))
-            {
-                ConsoleHelper.WriteSuccessMessage("\nProduct stock updated successfully.\n");
-            }
-            else
-            {
-                ConsoleHelper.WriteErrorMessage("\nProduct not found or invalid stock quantity.\n");
-            }
-
-            ConsoleHelper.CleanConsole();
+            this.WriteAll();
         }
 
-        /// <summary>
-        /// Displays all customer orders.
-        /// </summary>
-        private void DisplayOrders()
+        private void WriteAll()
         {
-            List<Order> orders = this._adminServices.GetAllOrders();
+            string fileData = JsonSerializer.Serialize(this._wishlists, this._options);
+            File.WriteAllText(this._filePath, fileData);
+        }
 
-            Console.WriteLine(@"
-==================================
-        CUSTOMER ORDERS
-==================================");
-
-            if (orders.Count == 0)
+        private void LoadAll()
+        {
+            if (!File.Exists(this._filePath))
             {
-                ConsoleHelper.WriteErrorMessage("\nNo orders found.\n");
-                ConsoleHelper.CleanConsole();
+                this.WriteAll();
                 return;
             }
 
-            foreach (Order order in orders)
+            string fileData = File.ReadAllText(this._filePath);
+
+            if (string.IsNullOrWhiteSpace(fileData))
             {
-                Console.WriteLine($@"
-==================================
-Order ID: {order.OrderId}
-Customer: {order.UserName}
-Order Date: {order.OrderDate}
-Delivery Address: {order.DeliveryAddress}
-Delivery Date: {order.DeliveryDate}
-Delivery Time: {order.DeliveryTime}");
-
-                foreach (OrderItem item in order.Items)
-                {
-                    Console.WriteLine($@"
-Product: {item.ProductName}
-Price: ₹{item.Price}
-Quantity: {item.Quantity}
-Subtotal: ₹{item.SubTotal}");
-                }
-
-                Console.WriteLine($@"
-Total Amount: ₹{order.TotalAmount}
-==================================");
+                return;
             }
 
-            ConsoleHelper.CleanConsole();
-        }
-
-        /// <summary>
-        /// Reads password input from the console, allowing the user to toggle visibility using the Tab key.
-        /// </summary>
-        /// <returns>The plain-text password entered by the user.</returns>
-        private string ReadMaskedPassword()
-        {
-            StringBuilder password = new StringBuilder();
-            bool isHidden = true;
-
-            while (true)
-            {
-                ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
-
-                if (keyInfo.Key == ConsoleKey.Enter)
-                {
-                    Console.WriteLine();
-                    break;
-                }
-                else if (keyInfo.Key == ConsoleKey.Tab)
-                {
-                    isHidden = !isHidden;
-
-                    for (int i = 0; i < password.Length; i++)
-                    {
-                        Console.Write("\b \b");
-                    }
-
-                    Console.Write(isHidden ? new string('*', password.Length) : password.ToString());
-                }
-                else if (keyInfo.Key == ConsoleKey.Backspace)
-                {
-                    if (password.Length > 0)
-                    {
-                        password.Remove(password.Length - 1, 1);
-                        Console.Write("\b \b");
-                    }
-                }
-                else if (!char.IsControl(keyInfo.KeyChar))
-                {
-                    password.Append(keyInfo.KeyChar);
-                    Console.Write(isHidden ? '*' : keyInfo.KeyChar);
-                }
-            }
-
-            return password.ToString();
+            List<Cart> wishlists = JsonSerializer.Deserialize<List<Cart>>(fileData, this._options) ?? new List<Cart>();
+            this._wishlists.AddRange(wishlists);
         }
     }
 }
