@@ -1,77 +1,45 @@
-/// <summary>
-/// Displays all products and allows the admin to update stock using the serial number.
-/// </summary>
-private void UpdateStock()
+
+namespace GroceryShopApp.Model
 {
-    List<Product> products = _adminServices.GetAllProducts();
-
-    if (products.Count == 0)
+    /// <summary>
+    /// Product class is the class which consists of properties of shop products.
+    /// </summary>
+    internal class Product
     {
-        ConsoleHelper.WriteErrorMessage("\nNo products available.\n");
-        return;
+        /// <summary>
+        /// Gets or sets the ID of the product.
+        /// </summary>
+        /// <value>ID of product</value>
+        public string ProductId { get; set; } = Guid.NewGuid().ToString();
+
+        /// <summary>
+        /// Gets or sets the name of the product.
+        /// </summary>
+        /// <value>Name of product</value>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the price of the product.
+        /// </summary>
+        /// <value>Price of product</value>
+        public decimal Price { get; set; }
+
+        /// <summary>
+        /// Gets or sets the category of the product.
+        /// </summary>
+        /// <value>Category of product</value>
+        public Categories Category { get; set; }
+
+        /// <summary>
+        /// Gets or sets the quantity of the product.
+        /// </summary>
+        /// <value>Quantity of product</value>
+        public int Quantity { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Imagefile of the product.
+        /// </summary>
+        /// <value>Imagefile of product</value>
+        public string ImageFile { get; set; } = string.Empty;
     }
-
-    Console.WriteLine("\n========== PRODUCT STOCK ==========\n");
-    Console.WriteLine("{0,-10} {1,-25} {2,-15}", "S.No", "Product Name", "Available Stock");
-    Console.WriteLine("--------------------------------------------------");
-
-    for (int i = 0; i < products.Count; i++)
-    {
-        Console.WriteLine("{0,-10} {1,-25} {2,-15}",
-            i + 1,
-            products[i].Name,
-            products[i].Quantity);
-    }
-
-    Console.WriteLine("\nEnter the serial number of the product to update:");
-
-    int serialNumber;
-
-    while (!int.TryParse(Console.ReadLine(), out serialNumber) ||
-           serialNumber < 1 ||
-           serialNumber > products.Count)
-    {
-        ConsoleHelper.WriteErrorMessage("\nEnter a valid serial number.\n");
-        Console.Write("Enter serial number: ");
-    }
-
-    Product selectedProduct = products[serialNumber - 1];
-
-    int quantity;
-
-    Console.Write($"\nEnter the new stock quantity for {selectedProduct.Name}: ");
-
-    while (!int.TryParse(Console.ReadLine(), out quantity) || quantity < 0)
-    {
-        ConsoleHelper.WriteErrorMessage("\nEnter a valid stock quantity.\n");
-        Console.Write("Enter new stock quantity: ");
-    }
-
-    _adminServices.UpdateProductStock(selectedProduct.Name, quantity);
-
-    ConsoleHelper.WriteSuccessMessage(
-        $"\nStock updated successfully for {selectedProduct.Name}.\n");
 }
-
-
-
-
-
-
-
-
-
-
-
-/// <summary>
-/// Gets all available products.
-/// </summary>
-/// <returns>List of all products.</returns>
-public List<Product> GetAllProducts()
-{
-    return _productRepository.GetAllProducts();
-}
-
-
-using GroceryShopApp.Model;
-using System.Collections.Generic;
