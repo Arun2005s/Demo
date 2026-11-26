@@ -3,6 +3,7 @@ using Timer.Models;
 using Timer.Repository;
 using Timer.Service;
 using Timer.Services;
+using Timer.View;
 using Timer.Views;
 
 namespace Timer
@@ -24,19 +25,26 @@ namespace Timer
                 new AuthenticationServices(userRepository);
 
             TimerServices timerService =
-                new TimerServices(taskRepository);
+                new TimerServices(taskRepository, userRepository);
 
             TaskHistoryServices taskHistoryService =
                 new TaskHistoryServices(taskRepository);
 
+            CsvServices csvServices = new CsvServices(taskRepository, taskHistoryService);
+
             AuthenticationView authView =
                 new AuthenticationView(authService);
 
+            AnalyticalDashboard analyticalDashboard = new AnalyticalDashboard(taskHistoryService);
+            ExportView exportView = new ExportView(csvServices);
+            ImportView importView = new ImportView(csvServices);
+            TaskView taskView = new TaskView(timerService);
             TaskHistoryView taskHistoryView =
-                new TaskHistoryView(taskHistoryService, timerService);
+                new TaskHistoryView(taskHistoryService, timerService, csvServices);
 
-            TimerView timerView =
-                new TimerView(timerService, taskHistoryView);
+            ProfileServices profileServices = new ProfileServices(userRepository);
+            ProfileView profileView = new ProfileView(profileServices);
+            Dashboard dashboard = new Dashboard(timerService, taskHistoryView, exportView, importView, analyticalDashboard, taskView, profileView);
 
             while (true)
             {
@@ -47,7 +55,7 @@ namespace Timer
                     break;
                 }
 
-                timerView.ShowDashboard(loggedInUser);
+                dashboard.ShowDashboard(loggedInUser);
             }
 
             Console.WriteLine("\nThank you for using Task Timer!");

@@ -34,5 +34,11 @@
         /// </summary>
         /// <value>A <see cref="TimeOnly"/> representing the daily start time. Defaults to <c>09:00:00</c>.</value>
         public TimeOnly DayStartTime { get; set; } = new TimeOnly(9, 0);
+
+        /// <summary>
+        /// Gets or sets the date when the user's daily reminder was last delivered.
+        /// </summary>
+        /// <value>The last reminder date, or null if no reminder has been delivered.</value>
+        public DateOnly? LastDailyReminderDate { get; set; }
     }
 }

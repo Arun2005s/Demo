@@ -1,5 +1,5 @@
 ﻿using System.Net.Mail;
-using System.Security.Cryptography;
+using Timer.Helpers;
 using Timer.Interfaces;
 using Timer.Models;
 
@@ -10,12 +10,6 @@ namespace Timer.Services
     /// </summary>
     public class AuthenticationServices
     {
-        private const int MinPasswordLength = 8;
-        private const int SaltSize = 16;
-        private const int KeySize = 32;
-        private const int Iterations = 100_000;
-        private static readonly HashAlgorithmName Algorithm = HashAlgorithmName.SHA256;
-
         private readonly IUserRepository _userRepository;
 
         /// <summary>
@@ -69,7 +63,7 @@ namespace Timer.Services
                 UserId = Guid.NewGuid(),
                 Name = name,
                 Email = email,
-                Password = HashPassword(password),
+                Password = PasswordHelper.Hash(password),
                 DayStartTime = dayStartTime,
             };
 
@@ -96,7 +90,7 @@ namespace Timer.Services
                 return null;
             }
 
-            if (!VerifyPassword(password, user.Password))
+            if (!PasswordHelper.Verify(password, user.Password))
             {
                 return null;
             }
@@ -122,96 +116,14 @@ namespace Timer.Services
         }
 
         /// <summary>
-        /// Validates that a password meets minimum length and complexity requirements.
+        /// Validates that a password meets the application's security requirements.
         /// </summary>
         /// <param name="password">The plain-text password to validate.</param>
-        /// <param name="errorMessage">When this method returns, contains the specific rule violated, or <see cref="string.Empty"/> if valid.</param>
-        /// <returns><see langword="true"/> if the password meets all strength rules; otherwise, <see langword="false"/>.</returns>
+        /// <param name="errorMessage">When this method returns false, contains the validation message.</param>
+        /// <returns>True if the password is valid; otherwise, false.</returns>
         private static bool ValidatePassword(string password, out string errorMessage)
         {
-            if (string.IsNullOrEmpty(password) || password.Length < MinPasswordLength)
-            {
-                errorMessage = $"Password must contain at least {MinPasswordLength} characters.";
-                return false;
-            }
-
-            if (password.Any(char.IsWhiteSpace))
-            {
-                errorMessage = "Password cannot contain spaces.";
-                return false;
-            }
-
-            if (!password.Any(char.IsUpper))
-            {
-                errorMessage = "Password must contain at least one uppercase letter (A-Z).";
-                return false;
-            }
-
-            if (!password.Any(char.IsLower))
-            {
-                errorMessage = "Password must contain at least one lowercase letter (a-z).";
-                return false;
-            }
-
-            if (!password.Any(char.IsDigit))
-            {
-                errorMessage = "Password must contain at least one number (0-9).";
-                return false;
-            }
-
-            if (password.All(char.IsLetterOrDigit))
-            {
-                errorMessage = "Password must contain at least one special character (e.g., !@#$%^&*).";
-                return false;
-            }
-
-            errorMessage = string.Empty;
-            return true;
-        }
-
-        /// <summary>
-        /// Generates a salted PBKDF2 hash string formatted as <c>{salt}.{hash}</c>.
-        /// </summary>
-        /// <param name="password">The plain-text password to hash.</param>
-        /// <returns>A Base64-encoded salt and hash separated by a period.</returns>
-        private static string HashPassword(string password)
-        {
-            byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
-            byte[] hash = Rfc2898DeriveBytes.Pbkdf2(
-                password,
-                salt,
-                Iterations,
-                Algorithm,
-                KeySize);
-
-            return $"{Convert.ToBase64String(salt)}.{Convert.ToBase64String(hash)}";
-        }
-
-        /// <summary>
-        /// Verifies a plain-text password against a stored <c>{salt}.{hash}</c> string using constant-time comparison.
-        /// </summary>
-        /// <param name="password">The plain-text password to verify.</param>
-        /// <param name="storedPassword">The stored salted hash string.</param>
-        /// <returns><see langword="true"/> if the password matches; otherwise, <see langword="false"/>.</returns>
-        private static bool VerifyPassword(string password, string storedPassword)
-        {
-            string[] parts = storedPassword.Split('.');
-            if (parts.Length != 2)
-            {
-                return false;
-            }
-
-            byte[] salt = Convert.FromBase64String(parts[0]);
-            byte[] expectedHash = Convert.FromBase64String(parts[1]);
-
-            byte[] actualHash = Rfc2898DeriveBytes.Pbkdf2(
-                password,
-                salt,
-                Iterations,
-                Algorithm,
-                expectedHash.Length);
-
-            return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
+            return PasswordHelper.Validate(password, out errorMessage);
         }
     }
 }

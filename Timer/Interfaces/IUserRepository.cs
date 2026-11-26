@@ -19,5 +19,11 @@ namespace Timer.Interfaces
         /// </summary>
         /// <param name="user">The <see cref="User"/> entity to add.</param>
         void Add(User user);
+
+        /// <summary>
+        /// update the user to the repository.
+        /// </summary>
+        /// <param name="user">The <see cref="User"/> entity to add.</param>
+        void Update(User user);
     }
 }

@@ -1,222 +1,45 @@
-﻿
-using System.Collections.Concurrent;
 using Spectre.Console;
+using Timer.Helpers;
 using Timer.Models;
 using Timer.Services;
 
-namespace Timer.Views
+namespace Timer.View
 {
     /// <summary>
-    /// Provides the console-based dashboard for creating tasks, tracking time, viewing task history, and managing task records.
+    /// Creating new task and managing task
     /// </summary>
-    public class TimerView
+    public class TaskView
     {
         private readonly TimerServices _timerService;
-        private readonly TaskHistoryView _logView;
-        private readonly ConcurrentQueue<string> _dailyReminderMessages = new ConcurrentQueue<string>();
         private volatile bool _targetReachedBannerShown;
 
         /// <summary>
-        /// Defines the actions available on the live timer screen.
-        /// </summary>
-        private enum TimerScreenAction
-        {
-            None,
-            Extend,
-            Back,
-            Stop
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TimerView"/> class.
+        /// Initializes a new instance of the <see cref="TaskView"/> class.
         /// </summary>
         /// <param name="timerService">The service used to manage task creation, timing, and persistence.</param>
-        /// <param name="logView">The view responsible for displaying and managing task history.</param>
-        public TimerView(TimerServices timerService, TaskHistoryView logView)
+        public TaskView(TimerServices timerService)
         {
             this._timerService = timerService;
-            this._logView = logView;
-        }
-
-        /// <summary>
-        /// Displays the main dashboard menu and handles navigation for the logged-in user.
-        /// </summary>
-        /// <param name="user">The currently authenticated user.</param>
-        public void ShowDashboard(User user)
-        {
-            this._timerService.OnDailyWorkReminder += this.HandleDailyWorkReminder;
-            this._timerService.StartDailyReminderMonitor(user);
-
-            try
-            {
-                while (true)
-                {
-                    AnsiConsole.Clear();
-                    this.DisplayDailyReminders();
-                    this.RenderDashboard(user);
-
-                    List<string> choices = new List<string>
-                    {
-                        this._timerService.ActiveTask != null
-                            ? "Return to Active Task"
-                            : "New Task",
-                        "Task History",
-                        "Export Data",
-                        "Import Logs",
-                        "Analytical Dashboard",
-                        "Logout"
-                    };
-
-                    string choice = AnsiConsole.Prompt(
-                        new SelectionPrompt<string>()
-                            .Title("Select an option")
-                            .AddChoices(choices));
-
-                    switch (choice)
-                    {
-                        case "Return to Active Task":
-                            if (this._timerService.ActiveTask != null)
-                            {
-                                bool startNextImmediately = this.ExecuteTimerWorkflow(
-                                    this._timerService.ActiveTask);
-
-                                if (startNextImmediately)
-                                {
-                                    this.CreateAndRunTask(user);
-                                }
-                            }
-
-                            break;
-
-                        case "New Task":
-                            this.CreateAndRunTask(user);
-                            break;
-
-                        case "Task History":
-                            bool resumedFromHistory = this._logView.ShowLogs(user);
-
-                            if (resumedFromHistory && this._timerService.ActiveTask != null)
-                            {
-                                bool startNextImmediately = this.ExecuteTimerWorkflow(
-                                    this._timerService.ActiveTask);
-
-                                if (startNextImmediately)
-                                {
-                                    this.CreateAndRunTask(user);
-                                }
-                            }
-
-                            break;
-
-                        case "Export Data":
-                            this._logView.TriggerHistoryExport(user);
-                            break;
-
-                        case "Import Logs":
-                            this._logView.ImportData(user);
-                            break;
-
-                        case "Analytical Dashboard":
-                            this._logView.ShowAnalyticsDashboard(user);
-                            break;
-
-                        case "Logout":
-                            if (this._timerService.ActiveTask != null)
-                            {
-                                string logoutChoice = AnsiConsole.Prompt(
-                                    new SelectionPrompt<string>()
-                                        .Title("An active task is running. Select an option:")
-                                        .AddChoices(
-                                            "Save task and logout",
-                                            "Return to dashboard"));
-
-                                if (logoutChoice == "Save task and logout")
-                                {
-                                    this._timerService.StopAndSaveTask();
-                                    return;
-                                }
-
-                                break;
-                            }
-
-                            return;
-                    }
-                }
-            }
-            finally
-            {
-                this._timerService.StopDailyReminderMonitor();
-                this._timerService.OnDailyWorkReminder -= this.HandleDailyWorkReminder;
-            }
-        }
-
-        /// <summary>
-        /// Displays the dashboard information, including user details and the current task status.
-        /// </summary>
-        /// <param name="user">The currently authenticated user.</param>
-        private void RenderDashboard(User user)
-        {
-            AnsiConsole.MarkupLine("[bold]TASK TIMER[/]");
-            AnsiConsole.Write(new Rule());
-
-            var userTable = new Table()
-                .Border(TableBorder.Simple)
-                .AddColumn("User")
-                .AddColumn("Email")
-                .AddColumn("Daily Start");
-
-            userTable.AddRow(
-                Markup.Escape(user.Name),
-                Markup.Escape(user.Email),
-                user.DayStartTime.ToString("hh:mm tt"));
-
-            AnsiConsole.Write(userTable);
-
-            TaskItem? activeTask = this._timerService.ActiveTask;
-
-            AnsiConsole.MarkupLine("\n[bold]TASK STATUS[/]");
-
-            if (activeTask != null)
-            {
-                string status = this._timerService.IsRunning
-                    ? "[green]Running[/]"
-                    : "[yellow]Paused[/]";
-
-                AnsiConsole.MarkupLine($"Task: {Markup.Escape(activeTask.TaskName)}");
-                AnsiConsole.MarkupLine($"Status: {status}");
-                AnsiConsole.MarkupLine(
-                    $"Elapsed: {this.FormatDuration(this._timerService.GetElapsedTime())}");
-
-                AnsiConsole.MarkupLine(
-                    $"Target: {this.FormatDuration(activeTask.TargetTime + activeTask.ExtendedTime)}");
-            }
-            else
-            {
-                AnsiConsole.MarkupLine("[grey]No active task.[/]");
-            }
-
-            AnsiConsole.WriteLine();
         }
 
         /// <summary>
         /// Prompts the user for task details and target duration, then starts the task.
         /// </summary>
         /// <param name="user">The user creating the task.</param>
-        private void CreateAndRunTask(User user)
+        public void CreateAndRunTask(User user)
         {
             while (true)
             {
                 AnsiConsole.Clear();
+                NotificationHelper.Display();
 
                 AnsiConsole.MarkupLine("[bold]CREATE NEW TASK[/]");
                 AnsiConsole.Write(new Rule());
 
-                string taskName = AnsiConsole.Prompt(
-                    new TextPrompt<string>("Enter task name:")
-                        .Validate(input =>
-                            !string.IsNullOrWhiteSpace(input)
-                                ? ValidationResult.Success()
-                                : ValidationResult.Error("Task name cannot be empty.")));
+                if (!InputHelper.TryPromptText("Enter task name:", input => !string.IsNullOrWhiteSpace(input), "Task name cannot be empty.", out string taskName))
+                {
+                    return;
+                }
 
                 AnsiConsole.MarkupLine(
                     "\n[grey]Enter the target duration. Press Enter to use 0.[/]\n");
@@ -263,7 +86,7 @@ namespace Timer.Views
         /// </summary>
         /// <param name="task">The task being monitored.</param>
         /// <returns>True if the caller should create another task; otherwise, false.</returns>
-        private bool ExecuteTimerWorkflow(TaskItem task)
+        public bool ExecuteTimerWorkflow(TaskItem task)
         {
             TimeSpan effectiveTarget = task.TargetTime + task.ExtendedTime;
 
@@ -317,6 +140,7 @@ namespace Timer.Views
         {
             while (true)
             {
+                Console.Clear();
                 TimerScreenAction action = TimerScreenAction.None;
 
                 AnsiConsole.Live(this.BuildLiveTimerPanel(task))
@@ -434,6 +258,7 @@ namespace Timer.Views
         private void RenderCompletedTask(TaskItem? task)
         {
             AnsiConsole.Clear();
+            NotificationHelper.Display();
 
             if (task == null)
             {
@@ -476,6 +301,7 @@ namespace Timer.Views
             try
             {
                 AnsiConsole.Clear();
+                NotificationHelper.Display();
 
                 AnsiConsole.MarkupLine("[bold]EXTEND TARGET TIME[/]");
                 AnsiConsole.Write(new Rule());
@@ -541,28 +367,6 @@ namespace Timer.Views
         }
 
         /// <summary>
-        /// Queues a daily work reminder for display on the dashboard.
-        /// </summary>
-        /// <param name="user">The user receiving the reminder.</param>
-        private void HandleDailyWorkReminder(User user)
-        {
-            this._dailyReminderMessages.Enqueue(
-                $"Good day, {user.Name}! It is your scheduled work start time ({user.DayStartTime:hh:mm tt}).");
-        }
-
-        /// <summary>
-        /// Displays pending daily work reminder messages.
-        /// </summary>
-        private void DisplayDailyReminders()
-        {
-            while (this._dailyReminderMessages.TryDequeue(out string? message))
-            {
-                AnsiConsole.MarkupLine(
-                    $"[cyan]{Markup.Escape(message)}[/]\n");
-            }
-        }
-
-        /// <summary>
         /// Waits for the user to press a key before continuing.
         /// </summary>
         private void WaitForUser()
@@ -578,7 +382,7 @@ namespace Timer.Views
         /// <returns>The formatted duration.</returns>
         private string FormatDuration(TimeSpan duration)
         {
-            return $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+            return DurationHelper.Format(duration);
         }
     }
 }

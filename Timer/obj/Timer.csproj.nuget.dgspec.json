@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\arunr\\source\\repos\\TimerApp\\Timer\\Timer.csproj": {}
+    "C:\\Users\\arunr\\Downloads\\Timer\\Timer.csproj": {}
   },
   "projects": {
-    "C:\\Users\\arunr\\source\\repos\\TimerApp\\Timer\\Timer.csproj": {
+    "C:\\Users\\arunr\\Downloads\\Timer\\Timer.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\arunr\\source\\repos\\TimerApp\\Timer\\Timer.csproj",
+        "projectUniqueName": "C:\\Users\\arunr\\Downloads\\Timer\\Timer.csproj",
         "projectName": "Timer",
-        "projectPath": "C:\\Users\\arunr\\source\\repos\\TimerApp\\Timer\\Timer.csproj",
+        "projectPath": "C:\\Users\\arunr\\Downloads\\Timer\\Timer.csproj",
         "packagesPath": "C:\\Users\\arunr\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\arunr\\source\\repos\\TimerApp\\Timer\\obj\\",
+        "outputPath": "C:\\Users\\arunr\\Downloads\\Timer\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\arunr\\AppData\\Roaming\\NuGet\\NuGet.Config",

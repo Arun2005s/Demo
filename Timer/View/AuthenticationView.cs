@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Spectre.Console;
+using Timer.Helpers;
 using Timer.Models;
 using Timer.Services;
 
@@ -30,9 +31,10 @@ namespace Timer.Views
             while (true)
             {
                 AnsiConsole.Clear();
+                NotificationHelper.Display();
 
                 AnsiConsole.MarkupLine("[bold]TASK TIMER[/]");
-                AnsiConsole.Write(new Rule());
+                AnsiConsole.Write(new Spectre.Console.Rule());
                 AnsiConsole.MarkupLine("[bold]LOGIN PAGE[/]\n");
 
                 string choice = AnsiConsole.Prompt(
@@ -69,9 +71,10 @@ namespace Timer.Views
         private User? Login()
         {
             AnsiConsole.Clear();
+            NotificationHelper.Display();
 
             AnsiConsole.MarkupLine("[bold]LOGIN[/]");
-            AnsiConsole.Write(new Rule());
+            AnsiConsole.Write(new Spectre.Console.Rule());
 
             string email = AnsiConsole.Ask<string>("Email:");
 
@@ -91,6 +94,8 @@ namespace Timer.Views
             }
 
             AnsiConsole.MarkupLine("\n[green]Login successful.[/]");
+            NotificationHelper.Queue("login", $"Welcome, {user.Name}!");
+            NotificationHelper.Display();
 
             return user;
         }
@@ -102,9 +107,10 @@ namespace Timer.Views
         private void SignUp()
         {
             AnsiConsole.Clear();
+            NotificationHelper.Display();
 
             AnsiConsole.MarkupLine("[bold]SIGN UP[/]");
-            AnsiConsole.Write(new Rule());
+            AnsiConsole.Write(new Spectre.Console.Rule());
 
             string name = string.Empty;
             bool validName = false;

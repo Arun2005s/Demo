@@ -1,16 +1,10 @@
 [
   {
-    "UserId": "3b685f13-0c39-4d27-847a-3f690ad56325",
-    "Name": "Prabu",
-    "Email": "prabu@gmail.com",
-    "Password": "tVndp4oEbFo9wd9iVCM\u002Beg==.nSS0YhLNG5\u002BvJGwa9I0rAvKBGjphTkCwR4iysmRBZ14=",
-    "DayStartTime": "01:01:00"
-  },
-  {
-    "UserId": "2126c572-05c2-4d2d-837c-50658b82497d",
-    "Name": "arun",
-    "Email": "arun@gmail.com",
-    "Password": "J97oTGXvm\u002BWaio\u002B/ByIiYw==.DhWK4hRU3A6aEyHXrX6j5E45tdFTzxipuKWftQlxJnw=",
-    "DayStartTime": "09:30:00"
+    "UserId": "b11729e1-f51b-4167-8235-c64cf46390f8",
+    "Name": "prabakaran",
+    "Email": "Prabu@gmail.com",
+    "Password": "iggvZPLnlS2ZaTdNZwxfJA==.sEOVtZJaE9giw8eTxJEqw7vViovc2hSEF2u3JrdVo/c=",
+    "DayStartTime": "19:10:00",
+    "LastDailyReminderDate": "2026-11-26"
   }
 ]

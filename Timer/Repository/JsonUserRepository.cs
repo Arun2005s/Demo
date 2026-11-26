@@ -10,6 +10,7 @@ namespace Timer.Repository
     public class JsonUserRepository : IUserRepository
     {
         private readonly string _filePath;
+        private readonly object _syncRoot = new object();
         private List<User> _users;
 
         /// <summary>
@@ -60,6 +61,29 @@ namespace Timer.Repository
         {
             this._users.Add(user);
             this.Save();
+        }
+
+        /// <summary>
+        /// Updates an existing user record in the database structure and writes changes to the JSON file.
+        /// </summary>
+        /// <param name="user">The modified <see cref="User"/> entity to update.</param>
+        public void Update(User user)
+        {
+            if (user == null)
+            {
+                return;
+            }
+
+            lock (this._syncRoot)
+            {
+                int index = this._users.FindIndex(existingUser => existingUser.UserId == user.UserId);
+
+                if (index != -1)
+                {
+                    this._users[index] = user;
+                    this.Save();
+                }
+            }
         }
 
         /// <summary>
