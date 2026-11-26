@@ -1,27 +1,185 @@
 
-namespace GroceryShopApp.Model
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Repository
 {
     /// <summary>
-    /// Cart class is the class which consists of properties of cart products.
+    /// Handles the storage and retrieval of product data to and from files.
     /// </summary>
-    internal class Cart
+    internal class ProductRepository
     {
-        /// <summary>
-        /// Gets or sets the UserName of the user.
-        /// </summary>
-        /// <value>Name of user</value>
-        public string UserName { get; set; } = string.Empty;
+        private readonly List<Product> _products = new List<Product>();
+        private readonly string _filePath;
+
+        private readonly JsonSerializerOptions _options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() },
+        };
 
         /// <summary>
-        /// Gets or sets the ID of the product.
+        /// Initializes a new instance of the <see cref="ProductRepository"/> class.
         /// </summary>
-        /// <value>ID of product</value>
-        public string ProductId { get; set; } = string.Empty;
+        /// <param name="filePath">Path where the product data-file is created.</param>
+        public ProductRepository(string filePath)
+        {
+            this._filePath = filePath;
+            this.LoadAll();
+        }
 
         /// <summary>
-        /// Gets or sets the quantity of the product in cart.
+        /// Retrieves all the products from the files.
         /// </summary>
-        /// <value>Quantity of product in cart</value>
-        public int CartQuantity { get; set; }
+        /// <returns>Products from files.</returns>
+        internal List<Product> GetAllProducts()
+        {
+            return this._products.ToList();
+        }
+
+        /// <summary>
+        /// Retrieves a product using its ID.
+        /// </summary>
+        /// <param name="productId">ID of the product.</param>
+        /// <returns>Product details if found, otherwise null.</returns>
+        internal Product? GetProductById(string productId)
+        {
+            return this._products.FirstOrDefault(product => product.ProductId == productId);
+        }
+
+        /// <summary>
+        /// Updates the stock quantity of a purchased product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be reduced.</param>
+        internal void UpdateProductStock(string productName, int quantity)
+        {
+            Product? product = this._products.FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            if (product != null && quantity > 0 && product.Quantity >= quantity)
+            {
+                product.Quantity -= quantity;
+                this.WriteAll();
+            }
+        }
+
+        /// <summary>
+        /// Sets the available stock quantity of a product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">New stock quantity.</param>
+        /// <returns>Returns whether the stock was updated or not.</returns>
+        internal bool SetProductStock(string productName, int quantity)
+        {
+            Product? product = this._products.FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            if (product == null || quantity < 0)
+            {
+                return false;
+            }
+
+            product.Quantity = quantity;
+            this.WriteAll();
+            return true;
+        }
+
+        /// <summary>
+        /// Adds the given quantity to the existing stock of a product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be added.</param>
+        /// <returns>Returns whether the stock was updated or not.</returns>
+        internal bool AddProductStock(string productName, int quantity)
+        {
+            Product? product = this._products.FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            if (product == null || quantity <= 0 || product.Quantity > int.MaxValue - quantity)
+            {
+                return false;
+            }
+
+            product.Quantity += quantity;
+            this.WriteAll();
+            return true;
+        }
+
+        /// <summary>
+        /// Retrieves products whose stock is at or below the low-stock limit.
+        /// </summary>
+        /// <returns>List of low-stock products.</returns>
+        internal List<Product> GetLowStockProducts()
+        {
+            return this._products.Where(product => product.Quantity <= 5).ToList();
+        }
+
+        private void WriteAll()
+        {
+            string fileData = JsonSerializer.Serialize(this._products, this._options);
+            File.WriteAllText(this._filePath, fileData);
+        }
+
+        private void LoadAll()
+        {
+            if (!File.Exists(this._filePath))
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+                this.AssignProductIds();
+                this.WriteAll();
+                return;
+            }
+
+            string fileData = File.ReadAllText(this._filePath);
+
+            if (string.IsNullOrWhiteSpace(fileData))
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+                this.AssignProductIds();
+                this.WriteAll();
+                return;
+            }
+
+            List<Product> products = JsonSerializer.Deserialize<List<Product>>(fileData, this._options) ?? new List<Product>();
+
+            if (products.Count == 0)
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+                this.AssignProductIds();
+                this.WriteAll();
+                return;
+            }
+
+            this._products.AddRange(products);
+            this.AssignProductIds();
+            this.WriteAll();
+        }
+
+        private void AssignProductIds()
+        {
+            foreach (Product product in this._products)
+            {
+                if (string.IsNullOrWhiteSpace(product.ProductId))
+                {
+                    product.ProductId = Guid.NewGuid().ToString();
+                }
+            }
+        }
+
+        private List<Product> GetDefaultProducts()
+        {
+            return new List<Product>
+            {
+                new Product { Name = "Carrot (1 kg)", Price = 60, Category = Categories.Vegetable, Quantity = 50, ImageFile = "carrot.jpg" },
+                new Product { Name = "Tomato (1 kg)", Price = 40, Category = Categories.Vegetable, Quantity = 50, ImageFile = "tomato.jpg" },
+                new Product { Name = "Potato (1 kg)", Price = 35, Category = Categories.Vegetable, Quantity = 80, ImageFile = "potato.jpg" },
+                new Product { Name = "Onion (1 kg)", Price = 45, Category = Categories.Vegetable, Quantity = 0, ImageFile = "onion.jpg" },
+                new Product { Name = "Apple (1 kg)", Price = 180, Category = Categories.Fruit, Quantity = 30, ImageFile = "apple.jpg" },
+                new Product { Name = "Banana (1 dozen)", Price = 60, Category = Categories.Fruit, Quantity = 40, ImageFile = "banana.jpg" },
+                new Product { Name = "Orange (1 kg)", Price = 90, Category = Categories.Fruit, Quantity = 25, ImageFile = "orange.jpg" },
+                new Product { Name = "Frying Pan (1 pc)", Price = 750, Category = Categories.Cookware, Quantity = 10, ImageFile = "fryingpan.jpg" },
+                new Product { Name = "Pressure Cooker (1 pc)", Price = 1800, Category = Categories.Cookware, Quantity = 5, ImageFile = "pressurecooker.jpg" },
+                new Product { Name = "Ladle (1 pc)", Price = 120, Category = Categories.Cookware, Quantity = 1, ImageFile = "ladle.jpg" },
+            };
+        }
     }
 }
