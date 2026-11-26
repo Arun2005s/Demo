@@ -1,121 +1,89 @@
 
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using GroceryShopApp.Model;
 
 namespace GroceryShopApp.Repository
 {
     /// <summary>
-    /// Handles the storage and retrieval of product data to and from files.
+    /// Handles the storage and retrieval of cart data to and from files.
     /// </summary>
-    internal class ProductRepository
+    internal class CartRepository
     {
-        private readonly List<Product> _products = new List<Product>();
+        private readonly List<Cart> _carts = new List<Cart>();
         private readonly string _filePath;
+        private readonly ProductRepository _productRepository;
 
         private readonly JsonSerializerOptions _options = new JsonSerializerOptions
         {
             WriteIndented = true,
-            Converters = { new JsonStringEnumConverter() },
         };
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ProductRepository"/> class.
+        /// Initializes a new instance of the <see cref="CartRepository"/> class.
         /// </summary>
-        /// <param name="filePath">Path where the product data-file is created.</param>
-        public ProductRepository(string filePath)
+        /// <param name="filePath">Path where the cart data-file is located.</param>
+        /// <param name="productRepository">Repository of the products.</param>
+        public CartRepository(string filePath, ProductRepository productRepository)
         {
             this._filePath = filePath;
+            this._productRepository = productRepository;
             this.LoadAll();
         }
 
         /// <summary>
-        /// Retrieves all the products from the files.
+        /// Retrieves all cart products of a particular user.
         /// </summary>
-        /// <returns>Products from files.</returns>
-        internal List<Product> GetAllProducts()
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of cart products.</returns>
+        internal List<Cart> GetCart(string userName)
         {
-            return this._products.ToList();
+            return this._carts.Where(cart => cart.UserName == userName).ToList();
         }
 
         /// <summary>
-        /// Retrieves a product using its ID.
+        /// Adds a product to the user's cart or updates its quantity.
         /// </summary>
-        /// <param name="productId">ID of the product.</param>
-        /// <returns>Product details if found, otherwise null.</returns>
-        internal Product? GetProductById(string productId)
+        /// <param name="cart">Cart details.</param>
+        internal void AddToCart(Cart cart)
         {
-            return this._products.FirstOrDefault(product => product.ProductId == productId);
-        }
+            Cart? existingCart = this._carts.FirstOrDefault(item => item.UserName == cart.UserName && item.ProductId == cart.ProductId);
 
-        /// <summary>
-        /// Updates the stock quantity of a purchased product.
-        /// </summary>
-        /// <param name="productName">Name of the product.</param>
-        /// <param name="quantity">Quantity to be reduced.</param>
-        internal void UpdateProductStock(string productName, int quantity)
-        {
-            Product? product = this._products.FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
-
-            if (product != null && quantity > 0 && product.Quantity >= quantity)
+            if (existingCart != null)
             {
-                product.Quantity -= quantity;
-                this.WriteAll();
+                existingCart.CartQuantity = cart.CartQuantity;
             }
-        }
-
-        /// <summary>
-        /// Sets the available stock quantity of a product.
-        /// </summary>
-        /// <param name="productName">Name of the product.</param>
-        /// <param name="quantity">New stock quantity.</param>
-        /// <returns>Returns whether the stock was updated or not.</returns>
-        internal bool SetProductStock(string productName, int quantity)
-        {
-            Product? product = this._products.FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
-
-            if (product == null || quantity < 0)
+            else
             {
-                return false;
+                this._carts.Add(cart);
             }
 
-            product.Quantity = quantity;
             this.WriteAll();
-            return true;
         }
 
         /// <summary>
-        /// Adds the given quantity to the existing stock of a product.
+        /// Removes all cart products of a particular user.
         /// </summary>
-        /// <param name="productName">Name of the product.</param>
-        /// <param name="quantity">Quantity to be added.</param>
-        /// <returns>Returns whether the stock was updated or not.</returns>
-        internal bool AddProductStock(string productName, int quantity)
+        /// <param name="userName">Username of the user.</param>
+        internal void RemoveCart(string userName)
         {
-            Product? product = this._products.FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
-
-            if (product == null || quantity <= 0 || product.Quantity > int.MaxValue - quantity)
-            {
-                return false;
-            }
-
-            product.Quantity += quantity;
+            this._carts.RemoveAll(cart => cart.UserName == userName);
             this.WriteAll();
-            return true;
         }
 
         /// <summary>
-        /// Retrieves products whose stock is at or below the low-stock limit.
+        /// Removes selected products from the user's cart.
         /// </summary>
-        /// <returns>List of low-stock products.</returns>
-        internal List<Product> GetLowStockProducts()
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productIds">IDs of products to be removed.</param>
+        internal void RemoveCartItems(string userName, List<string> productIds)
         {
-            return this._products.Where(product => product.Quantity <= 5).ToList();
+            this._carts.RemoveAll(cart => cart.UserName == userName && productIds.Contains(cart.ProductId));
+            this.WriteAll();
         }
 
         private void WriteAll()
         {
-            string fileData = JsonSerializer.Serialize(this._products, this._options);
+            string fileData = JsonSerializer.Serialize(this._carts, this._options);
             File.WriteAllText(this._filePath, fileData);
         }
 
@@ -123,8 +91,6 @@ namespace GroceryShopApp.Repository
         {
             if (!File.Exists(this._filePath))
             {
-                this._products.AddRange(this.GetDefaultProducts());
-                this.AssignProductIds();
                 this.WriteAll();
                 return;
             }
@@ -133,53 +99,51 @@ namespace GroceryShopApp.Repository
 
             if (string.IsNullOrWhiteSpace(fileData))
             {
-                this._products.AddRange(this.GetDefaultProducts());
-                this.AssignProductIds();
-                this.WriteAll();
                 return;
             }
 
-            List<Product> products = JsonSerializer.Deserialize<List<Product>>(fileData, this._options) ?? new List<Product>();
+            using JsonDocument document = JsonDocument.Parse(fileData);
 
-            if (products.Count == 0)
+            foreach (JsonElement item in document.RootElement.EnumerateArray())
             {
-                this._products.AddRange(this.GetDefaultProducts());
-                this.AssignProductIds();
-                this.WriteAll();
-                return;
-            }
+                string userName = item.TryGetProperty("UserName", out JsonElement userElement)
+                    ? userElement.GetString() ?? string.Empty
+                    : string.Empty;
 
-            this._products.AddRange(products);
-            this.AssignProductIds();
-            this.WriteAll();
-        }
+                string productId = item.TryGetProperty("ProductId", out JsonElement idElement)
+                    ? idElement.GetString() ?? string.Empty
+                    : string.Empty;
 
-        private void AssignProductIds()
-        {
-            foreach (Product product in this._products)
-            {
-                if (string.IsNullOrWhiteSpace(product.ProductId))
+                int cartQuantity = item.TryGetProperty("CartQuantity", out JsonElement quantityElement)
+                    ? quantityElement.GetInt32()
+                    : 0;
+
+                if (string.IsNullOrWhiteSpace(productId) &&
+                    item.TryGetProperty("Product", out JsonElement productElement) &&
+                    productElement.TryGetProperty("Name", out JsonElement nameElement))
                 {
-                    product.ProductId = Guid.NewGuid().ToString();
+                    string productName = nameElement.GetString() ?? string.Empty;
+
+                    Product? product = this._productRepository.GetAllProducts()
+                        .FirstOrDefault(product => product.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+                    productId = product?.ProductId ?? string.Empty;
+                }
+
+                if (!string.IsNullOrWhiteSpace(userName) &&
+                    !string.IsNullOrWhiteSpace(productId) &&
+                    cartQuantity > 0)
+                {
+                    this._carts.Add(new Cart
+                    {
+                        UserName = userName,
+                        ProductId = productId,
+                        CartQuantity = cartQuantity,
+                    });
                 }
             }
-        }
 
-        private List<Product> GetDefaultProducts()
-        {
-            return new List<Product>
-            {
-                new Product { Name = "Carrot (1 kg)", Price = 60, Category = Categories.Vegetable, Quantity = 50, ImageFile = "carrot.jpg" },
-                new Product { Name = "Tomato (1 kg)", Price = 40, Category = Categories.Vegetable, Quantity = 50, ImageFile = "tomato.jpg" },
-                new Product { Name = "Potato (1 kg)", Price = 35, Category = Categories.Vegetable, Quantity = 80, ImageFile = "potato.jpg" },
-                new Product { Name = "Onion (1 kg)", Price = 45, Category = Categories.Vegetable, Quantity = 0, ImageFile = "onion.jpg" },
-                new Product { Name = "Apple (1 kg)", Price = 180, Category = Categories.Fruit, Quantity = 30, ImageFile = "apple.jpg" },
-                new Product { Name = "Banana (1 dozen)", Price = 60, Category = Categories.Fruit, Quantity = 40, ImageFile = "banana.jpg" },
-                new Product { Name = "Orange (1 kg)", Price = 90, Category = Categories.Fruit, Quantity = 25, ImageFile = "orange.jpg" },
-                new Product { Name = "Frying Pan (1 pc)", Price = 750, Category = Categories.Cookware, Quantity = 10, ImageFile = "fryingpan.jpg" },
-                new Product { Name = "Pressure Cooker (1 pc)", Price = 1800, Category = Categories.Cookware, Quantity = 5, ImageFile = "pressurecooker.jpg" },
-                new Product { Name = "Ladle (1 pc)", Price = 120, Category = Categories.Cookware, Quantity = 1, ImageFile = "ladle.jpg" },
-            };
+            this.WriteAll();
         }
     }
 }
