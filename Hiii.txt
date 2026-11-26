@@ -1,43 +1,45 @@
 
-        /// <summary>
-        /// Retrieves a product using its ID.
-        /// </summary>
-        /// <param name="productId">ID of the product.</param>
-        /// <returns>Product details if found, otherwise null.</returns>
-        internal Product? GetProductById(string productId)
-        {
-            return this._products.FirstOrDefault(product => product.ProductId == productId);
-        }
-
-
-foreach (Product product in products)
+namespace GroceryShopApp.Model
 {
-    if (string.IsNullOrWhiteSpace(product.ProductId))
+    /// <summary>
+    /// Product class is the class which consists of properties of shop products.
+    /// </summary>
+    internal class Product
     {
-        product.ProductId = Guid.NewGuid().ToString();
+        /// <summary>
+        /// Gets or sets the ID of the product.
+        /// </summary>
+        /// <value>ID of product</value>
+        public string ProductId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the name of the product.
+        /// </summary>
+        /// <value>Name of product</value>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the price of the product.
+        /// </summary>
+        /// <value>Price of product</value>
+        public decimal Price { get; set; }
+
+        /// <summary>
+        /// Gets or sets the category of the product.
+        /// </summary>
+        /// <value>Category of product</value>
+        public Categories Category { get; set; }
+
+        /// <summary>
+        /// Gets or sets the quantity of the product.
+        /// </summary>
+        /// <value>Quantity of product</value>
+        public int Quantity { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Imagefile of the product.
+        /// </summary>
+        /// <value>Imagefile of product</value>
+        public string ImageFile { get; set; } = string.Empty;
     }
 }
-
-this._products.AddRange(products);
-this.WriteAll();
-
-
-
-        /// <summary>
-        /// Adds the given quantity to the existing stock of a product.
-        /// </summary>
-        /// <param name="productName">Name of the product.</param>
-        /// <param name="quantity">Quantity to be added.</param>
-        /// <returns>Returns whether the stock was updated or not.</returns>
-        internal bool AddProductStock(string productName, int quantity)
-        {
-            Product? product = this._products.FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
-            if (product == null || quantity <= 0 || product.Quantity > int.MaxValue - quantity)
-            {
-                return false;
-            }
-
-            product.Quantity += quantity;
-            this.WriteAll();
-            return true;
-        }
