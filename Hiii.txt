@@ -1,27 +1,43 @@
 
-namespace GroceryShopApp.Model
+        /// <summary>
+        /// Retrieves a product using its ID.
+        /// </summary>
+        /// <param name="productId">ID of the product.</param>
+        /// <returns>Product details if found, otherwise null.</returns>
+        internal Product? GetProductById(string productId)
+        {
+            return this._products.FirstOrDefault(product => product.ProductId == productId);
+        }
+
+
+foreach (Product product in products)
 {
-    /// <summary>
-    /// Cart class is the class which consists of properties of cart products.
-    /// </summary>
-    internal class Cart
+    if (string.IsNullOrWhiteSpace(product.ProductId))
     {
-        /// <summary>
-        /// Gets or sets the UserName of the user.
-        /// </summary>
-        /// <value>Name of user</value>
-        public string UserName { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the ID of the product.
-        /// </summary>
-        /// <value>ID of product</value>
-        public string ProductId { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the quantity of the product in cart.
-        /// </summary>
-        /// <value>Quantity of product in cart</value>
-        public int CartQuantity { get; set; }
+        product.ProductId = Guid.NewGuid().ToString();
     }
 }
+
+this._products.AddRange(products);
+this.WriteAll();
+
+
+
+        /// <summary>
+        /// Adds the given quantity to the existing stock of a product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be added.</param>
+        /// <returns>Returns whether the stock was updated or not.</returns>
+        internal bool AddProductStock(string productName, int quantity)
+        {
+            Product? product = this._products.FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+            if (product == null || quantity <= 0 || product.Quantity > int.MaxValue - quantity)
+            {
+                return false;
+            }
+
+            product.Quantity += quantity;
+            this.WriteAll();
+            return true;
+        }
