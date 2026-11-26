@@ -1,0 +1,2 @@
+﻿UserId,TaskId,TaskName,StartDate,EndDate,StartTime,EndTime,TargetTime,ExtendedTime,ElapsedTime,TotalDuration
+3b685f13-0c39-4d27-847a-3f690ad56325,6746eeec-448a-4c1f-b808-c8a30319eab2,1,2026-11-25,2026-11-25,22:22:53,22:23:03,00:00:05,00:00:00,00:00:09.7362180,00:00:09.7362321
