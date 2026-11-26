@@ -1,5 +1,619 @@
 
+using GroceryShopApp.Interface;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Services
+{
+    /// <summary>
+    /// Handles the business logics for cart and checkout operations.
+    /// </summary>
+    internal class CartServices
+    {
+        private const int MaxProductQuantity = 10;
+        private const int MaxCartProducts = 20;
+
+        private readonly ICartRepository _cartRepository;
+        private readonly IProductRepository _productRepository;
+        private readonly IOrderRepository _orderRepository;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CartServices"/> class.
+        /// </summary>
+        /// <param name="cartRepository">Repository of the cart.</param>
+        /// <param name="productRepository">Repository of the products.</param>
+        /// <param name="orderRepository">Repository of the orders.</param>
+        public CartServices(ICartRepository cartRepository, IProductRepository productRepository, IOrderRepository orderRepository)
+        {
+            this._cartRepository = cartRepository;
+            this._productRepository = productRepository;
+            this._orderRepository = orderRepository;
+        }
+
+        /// <summary>
+        /// Adds a product to the user's cart.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be added.</param>
+        /// <returns>Returns whether the product was added or not.</returns>
+        internal string AddToCart(string userName, string productName, int quantity)
+        {
+            if (quantity < 1 || quantity > MaxProductQuantity)
+            {
+                return "Quantity must be between 1 and 10.";
+            }
+
+            Product? product = this._productRepository.GetAllProducts()
+                .FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            if (product == null)
+            {
+                return "Product not found.";
+            }
+
+            if (product.Quantity <= 0)
+            {
+                return "Product is out of stock.";
+            }
+
+            List<Cart> carts = this._cartRepository.GetCart(userName);
+
+            Cart? existingCart = carts.FirstOrDefault(item =>
+                item.Product.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            int cartQuantity = quantity;
+
+            if (existingCart != null)
+            {
+                cartQuantity += existingCart.CartQuantity;
+            }
+            else if (carts.Count >= MaxCartProducts)
+            {
+                return "Cart cannot contain more than 20 different products.";
+            }
+
+            if (cartQuantity > MaxProductQuantity)
+            {
+                return "Maximum quantity allowed per product is 10.";
+            }
+
+            if (cartQuantity > product.Quantity)
+            {
+                return $"Only {product.Quantity} quantity is available.";
+            }
+
+            Cart cart = new Cart
+            {
+                UserName = userName,
+                Product = product,
+                CartQuantity = cartQuantity,
+            };
+
+            this._cartRepository.AddToCart(cart);
+            return "Product added to cart successfully.";
+        }
+
+        /// <summary>
+        /// Retrieves all products in the user's cart.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of cart products.</returns>
+        internal List<Cart> GetCart(string userName)
+        {
+            return this._cartRepository.GetCart(userName);
+        }
+
+        /// <summary>
+        /// Calculates the total amount of the user's cart.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>Total cart amount.</returns>
+        internal decimal GetCartTotal(string userName)
+        {
+            List<Cart> carts = this.GetCart(userName);
+            decimal totalAmount = 0;
+
+            foreach (Cart cart in carts)
+            {
+                totalAmount += cart.Product.Price * cart.CartQuantity;
+            }
+
+            return totalAmount;
+        }
+
+        /// <summary>
+        /// Clears all products from the user's cart.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        internal void ClearCart(string userName)
+        {
+            this._cartRepository.RemoveCart(userName);
+        }
+
+        /// <summary>
+        /// Retrieves the order history of a particular user.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of user orders.</returns>
+        internal List<Order> GetUserOrders(string userName)
+        {
+            return this._orderRepository.GetUserOrders(userName);
+        }
+
+        /// <summary>
+        /// Processes the checkout of selected products from the user's cart.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="deliveryAddress">Delivery address.</param>
+        /// <param name="deliveryDate">Delivery date.</param>
+        /// <param name="deliveryTime">Delivery time slot.</param>
+        /// <param name="productNames">Names of products to purchase.</param>
+        /// <returns>Returns the order after successful checkout.</returns>
+        internal Order? Checkout(string userName, string deliveryAddress, string deliveryDate, string deliveryTime, List<string> productNames)
+        {
+            List<Cart> carts = this.GetCart(userName)
+                .Where(cart => productNames.Contains(cart.Product.Name, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            if (carts.Count == 0)
+            {
+                return null;
+            }
+
+            List<Product> products = this._productRepository.GetAllProducts();
+
+            foreach (Cart cart in carts)
+            {
+                Product? product = products.FirstOrDefault(item =>
+                    item.Name.Equals(cart.Product.Name, StringComparison.OrdinalIgnoreCase));
+
+                if (product == null ||
+                    cart.CartQuantity < 1 ||
+                    cart.CartQuantity > MaxProductQuantity ||
+                    product.Quantity < cart.CartQuantity)
+                {
+                    return null;
+                }
+            }
+
+            Order order = new Order
+            {
+                OrderId = this._orderRepository.GetAllOrders()
+                    .Select(item => item.OrderId)
+                    .DefaultIfEmpty(0)
+                    .Max() + 1,
+                UserName = userName,
+                DeliveryAddress = deliveryAddress,
+                DeliveryDate = deliveryDate,
+                DeliveryTime = deliveryTime,
+                OrderDate = DateTime.Now,
+                TotalAmount = 0,
+            };
+
+            foreach (Cart cart in carts)
+            {
+                OrderItem orderItem = new OrderItem
+                {
+                    ProductName = cart.Product.Name,
+                    Price = cart.Product.Price,
+                    Quantity = cart.CartQuantity,
+                    SubTotal = cart.Product.Price * cart.CartQuantity,
+                };
+
+                order.Items.Add(orderItem);
+                order.TotalAmount += orderItem.SubTotal;
+            }
+
+            foreach (Cart cart in carts)
+            {
+                this._productRepository.UpdateProductStock(cart.Product.Name, cart.CartQuantity);
+            }
+
+            this._orderRepository.AddOrder(order);
+            this._cartRepository.RemoveCartItems(userName, productNames);
+
+            return order;
+        }
+    }
+}
+
+
+
+
+
+if (!int.TryParse(Console.ReadLine(), out int quantity) || quantity < 1 || quantity > 10)
+{
+    ConsoleHelper.WriteErrorMessage("\nQuantity must be between 1 and 10.\n");
+    return;
+}
+
+
+
+
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Interface
+{
+    /// <summary>
+    /// Defines the operations for the cart repository.
+    /// </summary>
+    internal interface ICartRepository
+    {
+        /// <summary>
+        /// Retrieves all cart products of a particular user.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of cart products.</returns>
+        List<Cart> GetCart(string userName);
+
+        /// <summary>
+        /// Adds a product to the user's cart or updates its quantity.
+        /// </summary>
+        /// <param name="cart">Cart details.</param>
+        void AddToCart(Cart cart);
+
+        /// <summary>
+        /// Removes all cart products of a particular user.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        void RemoveCart(string userName);
+
+        /// <summary>
+        /// Removes selected products from the user's cart.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productNames">Names of products to be removed.</param>
+        void RemoveCartItems(string userName, List<string> productNames);
+    }
+}
+
+
+
+
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Interface
+{
+    /// <summary>
+    /// Defines the operations for the product repository.
+    /// </summary>
+    internal interface IProductRepository
+    {
+        /// <summary>
+        /// Retrieves all the products from the files.
+        /// </summary>
+        /// <returns>Products from files.</returns>
+        List<Product> GetAllProducts();
+
+        /// <summary>
+        /// Updates the stock quantity of a purchased product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be reduced.</param>
+        void UpdateProductStock(string productName, int quantity);
+
+        /// <summary>
+        /// Sets the available stock quantity of a product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">New stock quantity.</param>
+        /// <returns>Returns whether the stock was updated or not.</returns>
+        bool SetProductStock(string productName, int quantity);
+
+        /// <summary>
+        /// Adds the given quantity to the existing stock of a product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be added.</param>
+        /// <returns>Returns whether the stock was updated or not.</returns>
+        bool AddProductStock(string productName, int quantity);
+
+        /// <summary>
+        /// Retrieves products whose stock is at or below the low-stock limit.
+        /// </summary>
+        /// <returns>List of low-stock products.</returns>
+        List<Product> GetLowStockProducts();
+    }
+}
+
+
+
+
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Interface
+{
+    /// <summary>
+    /// Defines the operations for the order repository.
+    /// </summary>
+    internal interface IOrderRepository
+    {
+        /// <summary>
+        /// Adds a new order to the repository.
+        /// </summary>
+        /// <param name="order">Order details.</param>
+        void AddOrder(Order order);
+
+        /// <summary>
+        /// Retrieves all the orders.
+        /// </summary>
+        /// <returns>List of all orders.</returns>
+        List<Order> GetAllOrders();
+
+        /// <summary>
+        /// Retrieves orders of a particular user.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of user orders.</returns>
+        List<Order> GetUserOrders(string userName);
+    }
+}
+
+
+
+
+
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Interface
+{
+    /// <summary>
+    /// Defines the operations for the user repository.
+    /// </summary>
+    internal interface IUserRepository
+    {
+        /// <summary>
+        /// Adds the user data to the repository.
+        /// </summary>
+        /// <param name="user">Data of user.</param>
+        void AddUser(User user);
+
+        /// <summary>
+        /// Checks whether the user data already exists in repository.
+        /// </summary>
+        /// <param name="userName">Unique username of the user.</param>
+        /// <param name="phone">Phone number of the user.</param>
+        /// <returns>Returns whether the user already exists or not.</returns>
+        bool IsUserAlreadyExists(string userName, string phone);
+
+        /// <summary>
+        /// Checks whether the user has already signed up or not.
+        /// </summary>
+        /// <param name="userName">Unique username of the user.</param>
+        /// <param name="password">Password of the user.</param>
+        /// <returns>Returns whether the user is registered or not.</returns>
+        bool IsRegisteredUser(string userName, string password);
+
+        /// <summary>
+        /// Checks whether the user has already signed up and checks if the user is admin.
+        /// </summary>
+        /// <param name="userName">Unique username of the user.</param>
+        /// <param name="password">Password of the user.</param>
+        /// <returns>Returns whether the user is an admin or not.</returns>
+        bool IsUserAdmin(string userName, string password);
+
+        /// <summary>
+        /// Checks whether the username exists or not.
+        /// </summary>
+        /// <param name="userName">Unique username of the user.</param>
+        /// <returns>Returns whether the username exists or not.</returns>
+        bool IsUserNameValid(string userName);
+
+        /// <summary>
+        /// Identifies whether the admin is already present or not.
+        /// </summary>
+        /// <returns>Returns whether an admin is present or not.</returns>
+        bool IsAdminPresent();
+    }
+}
+
+
+
+
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Interface
+{
+    /// <summary>
+    /// Defines the operations for the wishlist repository.
+    /// </summary>
+    internal interface IWishlistRepository
+    {
+        /// <summary>
+        /// Retrieves all wishlist products of a particular user.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of wishlist products.</returns>
+        List<Cart> GetWishlist(string userName);
+
+        /// <summary>
+        /// Adds a product to the user's wishlist.
+        /// </summary>
+        /// <param name="cart">Wishlist product details.</param>
+        void AddToWishlist(Cart cart);
+
+        /// <summary>
+        /// Removes a product from the user's wishlist.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productName">Name of the product.</param>
+        void RemoveFromWishlist(string userName, string productName);
+    }
+}
+
+
+
+
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using GroceryShopApp.Interface;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Repository
+{
+    /// <summary>
+    /// Handles the storage and retrieval of product data to and from files.
+    /// </summary>
+    internal class ProductRepository : IProductRepository
+    {
+        private readonly List<Product> _products = new List<Product>();
+        private readonly string _filePath;
+
+        private readonly JsonSerializerOptions _options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() },
+        };
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ProductRepository"/> class.
+        /// </summary>
+        /// <param name="filePath">Path where the product data-file is created.</param>
+        public ProductRepository(string filePath)
+        {
+            this._filePath = filePath;
+            this.LoadAll();
+        }
+
+        /// <summary>
+        /// Retrieves all the products from the files.
+        /// </summary>
+        /// <returns>Products from files.</returns>
+        public List<Product> GetAllProducts()
+        {
+            return this._products.ToList();
+        }
+
+        /// <summary>
+        /// Updates the stock quantity of a purchased product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be reduced.</param>
+        public void UpdateProductStock(string productName, int quantity)
+        {
+            Product? product = this._products.FirstOrDefault(item =>
+                item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            if (product != null && quantity > 0 && product.Quantity >= quantity)
+            {
+                product.Quantity -= quantity;
+                this.WriteAll();
+            }
+        }
+
+        /// <summary>
+        /// Sets the available stock quantity of a product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">New stock quantity.</param>
+        /// <returns>Returns whether the stock was updated or not.</returns>
+        public bool SetProductStock(string productName, int quantity)
+        {
+            Product? product = this._products.FirstOrDefault(item =>
+                item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            if (product == null || quantity < 0)
+            {
+                return false;
+            }
+
+            product.Quantity = quantity;
+            this.WriteAll();
+            return true;
+        }
+
+        /// <summary>
+        /// Adds the given quantity to the existing stock of a product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Quantity to be added.</param>
+        /// <returns>Returns whether the stock was updated or not.</returns>
+        public bool AddProductStock(string productName, int quantity)
+        {
+            Product? product = this._products.FirstOrDefault(item =>
+                item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            if (product == null || quantity <= 0 || product.Quantity > int.MaxValue - quantity)
+            {
+                return false;
+            }
+
+            product.Quantity += quantity;
+            this.WriteAll();
+            return true;
+        }
+
+        /// <summary>
+        /// Retrieves products whose stock is at or below the low-stock limit.
+        /// </summary>
+        /// <returns>List of low-stock products.</returns>
+        public List<Product> GetLowStockProducts()
+        {
+            return this._products.Where(product => product.Quantity <= 5).ToList();
+        }
+
+        private void WriteAll()
+        {
+            string fileData = JsonSerializer.Serialize(this._products, this._options);
+            File.WriteAllText(this._filePath, fileData);
+        }
+
+        private void LoadAll()
+        {
+            if (!File.Exists(this._filePath))
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+                this.WriteAll();
+                return;
+            }
+
+            string fileData = File.ReadAllText(this._filePath);
+
+            if (string.IsNullOrWhiteSpace(fileData))
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+                this.WriteAll();
+                return;
+            }
+
+            List<Product> products = JsonSerializer.Deserialize<List<Product>>(fileData, this._options) ?? new List<Product>();
+
+            if (products.Count == 0)
+            {
+                this._products.AddRange(this.GetDefaultProducts());
+                this.WriteAll();
+                return;
+            }
+
+            this._products.AddRange(products);
+        }
+
+        private List<Product> GetDefaultProducts()
+        {
+            return new List<Product>
+            {
+                new Product { Name = "Carrot (1 kg)", Price = 60, Category = Categories.Vegetable, Quantity = 50, ImageFile = "carrot.jpg" },
+                new Product { Name = "Tomato (1 kg)", Price = 40, Category = Categories.Vegetable, Quantity = 50, ImageFile = "tomato.jpg" },
+                new Product { Name = "Potato (1 kg)", Price = 35, Category = Categories.Vegetable, Quantity = 80, ImageFile = "potato.jpg" },
+                new Product { Name = "Onion (1 kg)", Price = 45, Category = Categories.Vegetable, Quantity = 0, ImageFile = "onion.jpg" },
+                new Product { Name = "Apple (1 kg)", Price = 180, Category = Categories.Fruit, Quantity = 30, ImageFile = "apple.jpg" },
+                new Product { Name = "Banana (1 dozen)", Price = 60, Category = Categories.Fruit, Quantity = 40, ImageFile = "banana.jpg" },
+                new Product { Name = "Orange (1 kg)", Price = 90, Category = Categories.Fruit, Quantity = 25, ImageFile = "orange.jpg" },
+                new Product { Name = "Frying Pan (1 pc)", Price = 750, Category = Categories.Cookware, Quantity = 10, ImageFile = "fryingpan.jpg" },
+                new Product { Name = "Pressure Cooker (1 pc)", Price = 1800, Category = Categories.Cookware, Quantity = 5, ImageFile = "pressurecooker.jpg" },
+                new Product { Name = "Ladle (1 pc)", Price = 120, Category = Categories.Cookware, Quantity = 1, ImageFile = "ladle.jpg" },
+            };
+        }
+    }
+}
+
+
+
+
+
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using GroceryShopApp.Interface;
 using GroceryShopApp.Model;
 
 namespace GroceryShopApp.Repository
@@ -7,26 +621,24 @@ namespace GroceryShopApp.Repository
     /// <summary>
     /// Handles the storage and retrieval of cart data to and from files.
     /// </summary>
-    internal class CartRepository
+    internal class CartRepository : ICartRepository
     {
         private readonly List<Cart> _carts = new List<Cart>();
         private readonly string _filePath;
-        private readonly ProductRepository _productRepository;
 
         private readonly JsonSerializerOptions _options = new JsonSerializerOptions
         {
             WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() },
         };
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CartRepository"/> class.
         /// </summary>
         /// <param name="filePath">Path where the cart data-file is located.</param>
-        /// <param name="productRepository">Repository of the products.</param>
-        public CartRepository(string filePath, ProductRepository productRepository)
+        public CartRepository(string filePath)
         {
             this._filePath = filePath;
-            this._productRepository = productRepository;
             this.LoadAll();
         }
 
@@ -35,7 +647,7 @@ namespace GroceryShopApp.Repository
         /// </summary>
         /// <param name="userName">Username of the user.</param>
         /// <returns>List of cart products.</returns>
-        internal List<Cart> GetCart(string userName)
+        public List<Cart> GetCart(string userName)
         {
             return this._carts.Where(cart => cart.UserName == userName).ToList();
         }
@@ -44,13 +656,16 @@ namespace GroceryShopApp.Repository
         /// Adds a product to the user's cart or updates its quantity.
         /// </summary>
         /// <param name="cart">Cart details.</param>
-        internal void AddToCart(Cart cart)
+        public void AddToCart(Cart cart)
         {
-            Cart? existingCart = this._carts.FirstOrDefault(item => item.UserName == cart.UserName && item.ProductId == cart.ProductId);
+            Cart? existingCart = this._carts.FirstOrDefault(item =>
+                item.UserName == cart.UserName &&
+                item.Product.Name == cart.Product.Name);
 
             if (existingCart != null)
             {
                 existingCart.CartQuantity = cart.CartQuantity;
+                existingCart.Product = cart.Product;
             }
             else
             {
@@ -64,7 +679,7 @@ namespace GroceryShopApp.Repository
         /// Removes all cart products of a particular user.
         /// </summary>
         /// <param name="userName">Username of the user.</param>
-        internal void RemoveCart(string userName)
+        public void RemoveCart(string userName)
         {
             this._carts.RemoveAll(cart => cart.UserName == userName);
             this.WriteAll();
@@ -74,10 +689,13 @@ namespace GroceryShopApp.Repository
         /// Removes selected products from the user's cart.
         /// </summary>
         /// <param name="userName">Username of the user.</param>
-        /// <param name="productIds">IDs of products to be removed.</param>
-        internal void RemoveCartItems(string userName, List<string> productIds)
+        /// <param name="productNames">Names of products to be removed.</param>
+        public void RemoveCartItems(string userName, List<string> productNames)
         {
-            this._carts.RemoveAll(cart => cart.UserName == userName && productIds.Contains(cart.ProductId));
+            this._carts.RemoveAll(cart =>
+                cart.UserName == userName &&
+                productNames.Contains(cart.Product.Name, StringComparer.OrdinalIgnoreCase));
+
             this.WriteAll();
         }
 
@@ -102,48 +720,989 @@ namespace GroceryShopApp.Repository
                 return;
             }
 
-            using JsonDocument document = JsonDocument.Parse(fileData);
-
-            foreach (JsonElement item in document.RootElement.EnumerateArray())
-            {
-                string userName = item.TryGetProperty("UserName", out JsonElement userElement)
-                    ? userElement.GetString() ?? string.Empty
-                    : string.Empty;
-
-                string productId = item.TryGetProperty("ProductId", out JsonElement idElement)
-                    ? idElement.GetString() ?? string.Empty
-                    : string.Empty;
-
-                int cartQuantity = item.TryGetProperty("CartQuantity", out JsonElement quantityElement)
-                    ? quantityElement.GetInt32()
-                    : 0;
-
-                if (string.IsNullOrWhiteSpace(productId) &&
-                    item.TryGetProperty("Product", out JsonElement productElement) &&
-                    productElement.TryGetProperty("Name", out JsonElement nameElement))
-                {
-                    string productName = nameElement.GetString() ?? string.Empty;
-
-                    Product? product = this._productRepository.GetAllProducts()
-                        .FirstOrDefault(product => product.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
-
-                    productId = product?.ProductId ?? string.Empty;
-                }
-
-                if (!string.IsNullOrWhiteSpace(userName) &&
-                    !string.IsNullOrWhiteSpace(productId) &&
-                    cartQuantity > 0)
-                {
-                    this._carts.Add(new Cart
-                    {
-                        UserName = userName,
-                        ProductId = productId,
-                        CartQuantity = cartQuantity,
-                    });
-                }
-            }
-
-            this.WriteAll();
+            List<Cart> carts = JsonSerializer.Deserialize<List<Cart>>(fileData, this._options) ?? new List<Cart>();
+            this._carts.AddRange(carts);
         }
     }
 }
+
+
+
+
+
+using System.Text.Json;
+using GroceryShopApp.Interface;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Repository
+{
+    /// <summary>
+    /// Handles the storage and retrieval of order data to and from files.
+    /// </summary>
+    internal class OrderRepository : IOrderRepository
+    {
+        private readonly List<Order> _orders = new List<Order>();
+        private readonly string _filePath;
+
+        private readonly JsonSerializerOptions _options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+        };
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="OrderRepository"/> class.
+        /// </summary>
+        /// <param name="filePath">Path where the order data-file is located.</param>
+        public OrderRepository(string filePath)
+        {
+            this._filePath = filePath;
+            this.LoadAll();
+        }
+
+        /// <summary>
+        /// Adds a new order to the repository.
+        /// </summary>
+        /// <param name="order">Order details.</param>
+        public void AddOrder(Order order)
+        {
+            this._orders.Add(order);
+            this.WriteAll();
+        }
+
+        /// <summary>
+        /// Retrieves all the orders.
+        /// </summary>
+        /// <returns>List of all orders.</returns>
+        public List<Order> GetAllOrders()
+        {
+            return this._orders.ToList();
+        }
+
+        /// <summary>
+        /// Retrieves orders of a particular user.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of user orders.</returns>
+        public List<Order> GetUserOrders(string userName)
+        {
+            return this._orders.Where(order => order.UserName == userName).ToList();
+        }
+
+        private void WriteAll()
+        {
+            string fileData = JsonSerializer.Serialize(this._orders, this._options);
+            File.WriteAllText(this._filePath, fileData);
+        }
+
+        private void LoadAll()
+        {
+            if (!File.Exists(this._filePath))
+            {
+                this.WriteAll();
+                return;
+            }
+
+            string fileData = File.ReadAllText(this._filePath);
+
+            if (string.IsNullOrWhiteSpace(fileData))
+            {
+                return;
+            }
+
+            List<Order> orders = JsonSerializer.Deserialize<List<Order>>(fileData, this._options) ?? new List<Order>();
+            this._orders.AddRange(orders);
+        }
+    }
+}
+
+
+
+
+
+using System.Text.Json;
+using GroceryShopApp.Interface;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Repository
+{
+    /// <summary>
+    /// Handles the storage and retrieval of user data to and from files.
+    /// </summary>
+    internal class UserRepository : IUserRepository
+    {
+        private readonly List<User> _users = new List<User>();
+        private readonly string _filePath;
+
+        private readonly JsonSerializerOptions _options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+        };
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="UserRepository"/> class.
+        /// </summary>
+        /// <param name="filePath">Path where the user data-file is located</param>
+        public UserRepository(string filePath)
+        {
+            this._filePath = filePath;
+            this._users = this.LoadAll();
+        }
+
+        /// <summary>
+        /// Adds the user data to the repository.
+        /// </summary>
+        /// <param name="user">Datas of user</param>
+        public void AddUser(User user)
+        {
+            this._users.Add(user);
+            this.WriteAll();
+        }
+
+        /// <summary>
+        /// Checks whether the user data already exists in repository and returns true if it exists and vice-versa.
+        /// </summary>
+        /// <param name="userName">Unique username of the user</param>
+        /// <param name="phone">Phone number of the user</param>
+        /// <returns>Returns whether the user already exits or not</returns>
+        public bool IsUserAlreadyExists(string userName, string phone)
+        {
+            return this._users.Any(user => user.UserName == userName || user.Phone == phone);
+        }
+
+        /// <summary>
+        /// Checks whether the user has already signed up or not.
+        /// </summary>
+        /// <param name="userName">Unique username of the user</param>
+        /// <param name="password">Password of the user</param>
+        /// <returns>Returns true is user already signed up or vice-versa.</returns>
+        public bool IsRegisteredUser(string userName, string password)
+        {
+            return this._users.Any(user => user.UserName == userName && user.Password == password);
+        }
+
+        /// <summary>
+        /// Checks whether the user has already signed up or not and checks if he is admin.
+        /// </summary>
+        /// <param name="userName">Unique username of the user</param>
+        /// <param name="password">Password of the user</param>
+        /// <returns>Returns true is user already signed up or vice-versa and also checks if he is admin or not.</returns>
+        public bool IsUserAdmin(string userName, string password)
+        {
+            return this._users.Any(user =>
+                user.UserName == userName &&
+                user.Password == password &&
+                user.IsAdmin == true);
+        }
+
+        /// <summary>
+        /// Checks whether the username exists or not.
+        /// </summary>
+        /// <param name="userName">Unique username of the user</param>
+        /// <returns>Returns true if username exists or vice-versa</returns>
+        public bool IsUserNameValid(string userName)
+        {
+            return this._users.Any(user => user.UserName == userName);
+        }
+
+        /// <summary>
+        /// Identifies whether the admin is already present or not.
+        /// </summary>
+        /// <returns>Returns true if admin is present or not.</returns>
+        public bool IsAdminPresent()
+        {
+            return this._users.Any(user => user.IsAdmin == true);
+        }
+
+        private void WriteAll()
+        {
+            string fileData = JsonSerializer.Serialize(this._users, this._options);
+            File.WriteAllText(this._filePath, fileData);
+        }
+
+        private List<User> LoadAll()
+        {
+            if (!File.Exists(this._filePath))
+            {
+                return new List<User>();
+            }
+
+            string fileData = File.ReadAllText(this._filePath);
+            return JsonSerializer.Deserialize<List<User>>(fileData, this._options) ?? new List<User>();
+        }
+    }
+}
+
+
+
+
+
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using GroceryShopApp.Interface;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Repository
+{
+    /// <summary>
+    /// Handles the storage and retrieval of wishlist data to and from files.
+    /// </summary>
+    internal class WishlistRepository : IWishlistRepository
+    {
+        private readonly List<Cart> _wishlists = new List<Cart>();
+        private readonly string _filePath;
+
+        private readonly JsonSerializerOptions _options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() },
+        };
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WishlistRepository"/> class.
+        /// </summary>
+        /// <param name="filePath">Path where the wishlist data-file is located.</param>
+        public WishlistRepository(string filePath)
+        {
+            this._filePath = filePath;
+            this.LoadAll();
+        }
+
+        /// <summary>
+        /// Retrieves all wishlist products of a particular user.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of wishlist products.</returns>
+        public List<Cart> GetWishlist(string userName)
+        {
+            return this._wishlists.Where(item => item.UserName == userName).ToList();
+        }
+
+        /// <summary>
+        /// Adds a product to the user's wishlist.
+        /// </summary>
+        /// <param name="cart">Wishlist product details.</param>
+        public void AddToWishlist(Cart cart)
+        {
+            Cart? existingProduct = this._wishlists.FirstOrDefault(item =>
+                item.UserName == cart.UserName &&
+                item.Product.Name == cart.Product.Name);
+
+            if (existingProduct == null)
+            {
+                this._wishlists.Add(cart);
+                this.WriteAll();
+            }
+        }
+
+        /// <summary>
+        /// Removes a product from the user's wishlist.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productName">Name of the product.</param>
+        public void RemoveFromWishlist(string userName, string productName)
+        {
+            this._wishlists.RemoveAll(item =>
+                item.UserName == userName &&
+                item.Product.Name == productName);
+
+            this.WriteAll();
+        }
+
+        private void WriteAll()
+        {
+            string fileData = JsonSerializer.Serialize(this._wishlists, this._options);
+            File.WriteAllText(this._filePath, fileData);
+        }
+
+        private void LoadAll()
+        {
+            if (!File.Exists(this._filePath))
+            {
+                this.WriteAll();
+                return;
+            }
+
+            string fileData = File.ReadAllText(this._filePath);
+
+            if (string.IsNullOrWhiteSpace(fileData))
+            {
+                return;
+            }
+
+            List<Cart> wishlists = JsonSerializer.Deserialize<List<Cart>>(fileData, this._options) ?? new List<Cart>();
+            this._wishlists.AddRange(wishlists);
+        }
+    }
+}
+
+
+
+
+using System.Security.Cryptography;
+using System.Text;
+using GroceryShopApp.Interface;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Services
+{
+    /// <summary>
+    /// Handles the business logics for the admin.
+    /// </summary>
+    internal class AdminServices
+    {
+        private readonly IUserRepository _userRepository;
+        private readonly IProductRepository _productRepository;
+        private readonly IOrderRepository _orderRepository;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AdminServices"/> class.
+        /// </summary>
+        /// <param name="userRepository">Repository of users.</param>
+        /// <param name="productRepository">Repository of products.</param>
+        /// <param name="orderRepository">Repository of orders.</param>
+        public AdminServices(IUserRepository userRepository, IProductRepository productRepository, IOrderRepository orderRepository)
+        {
+            this._userRepository = userRepository;
+            this._productRepository = productRepository;
+            this._orderRepository = orderRepository;
+        }
+
+        /// <summary>
+        /// Checks whether the user is an admin or not.
+        /// </summary>
+        /// <param name="userName">Username of admin.</param>
+        /// <param name="password">Password of admin.</param>
+        /// <returns>Returns whether the user is admin or not.</returns>
+        internal bool IsAdmin(string userName, string password)
+        {
+            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(password));
+            string hashedPassword = Convert.ToHexString(hash).ToLowerInvariant();
+            return this._userRepository.IsUserAdmin(userName, hashedPassword);
+        }
+
+        /// <summary>
+        /// Retrieves all the customer orders.
+        /// </summary>
+        /// <returns>List of all orders.</returns>
+        internal List<Order> GetAllOrders()
+        {
+            return this._orderRepository.GetAllOrders();
+        }
+
+        /// <summary>
+        /// Retrieves products whose stock is low.
+        /// </summary>
+        /// <returns>List of low-stock products.</returns>
+        internal List<Product> GetLowStockProducts()
+        {
+            return this._productRepository.GetLowStockProducts();
+        }
+
+        /// <summary>
+        /// Updates the stock quantity of a product.
+        /// </summary>
+        /// <param name="productName">Name of the product.</param>
+        /// <param name="quantity">Stock quantity.</param>
+        /// <param name="isAddStock">Whether the quantity should be added to the existing stock.</param>
+        /// <returns>Returns whether the stock was updated or not.</returns>
+        internal bool UpdateProductStock(string productName, int quantity, bool isAddStock)
+        {
+            if (string.IsNullOrWhiteSpace(productName) || quantity < 0)
+            {
+                return false;
+            }
+
+            if (isAddStock)
+            {
+                return this._productRepository.AddProductStock(productName.Trim(), quantity);
+            }
+
+            return this._productRepository.SetProductStock(productName.Trim(), quantity);
+        }
+
+        /// <summary>
+        /// Gets all available products.
+        /// </summary>
+        /// <returns>List of all products.</returns>
+        internal List<Product> GetAllProducts()
+        {
+            return this._productRepository.GetAllProducts();
+        }
+    }
+}
+
+
+
+
+using GroceryShopApp.Interface;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Services
+{
+    /// <summary>
+    /// Handles the business logics for the products.
+    /// </summary>
+    internal class ProductServices
+    {
+        private readonly IProductRepository _productRepository;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ProductServices"/> class.
+        /// </summary>
+        /// <param name="productRepository">Repository of the products.</param>
+        public ProductServices(IProductRepository productRepository)
+        {
+            this._productRepository = productRepository;
+        }
+
+        /// <summary>
+        /// Retrieves the list of products from a particular category.
+        /// </summary>
+        /// <param name="category">Category of the product.</param>
+        /// <returns>Returns the list of product of selected category.</returns>
+        internal List<Product> GetProductsByCategory(Categories category)
+        {
+            List<Product> products = this._productRepository.GetAllProducts();
+            return products.Where(product => product.Category == category).ToList();
+        }
+
+        /// <summary>
+        /// Handles the searching of products and returns the selected product.
+        /// </summary>
+        /// <param name="category">Category of the product to be found.</param>
+        /// <param name="searchName">Name of the product to be found.</param>
+        /// <returns>Returns the selected product.</returns>
+        internal List<Product> SearchProducts(Categories category, string searchName)
+        {
+            List<Product> products = this.GetProductsByCategory(category);
+            return products.Where(product => product.Name.Contains(searchName, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        /// <summary>
+        /// Retrieves all products from the repository.
+        /// </summary>
+        /// <returns>List of all products.</returns>
+        internal List<Product> GetAllProducts()
+        {
+            return this._productRepository.GetAllProducts();
+        }
+    }
+}
+
+
+
+
+using System.Security.Cryptography;
+using System.Text;
+using GroceryShopApp.Interface;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Services
+{
+    /// <summary>
+    /// Handles the business logics for the user.
+    /// </summary>
+    internal class UserServices
+    {
+        private readonly IUserRepository _userRepository;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="UserServices"/> class.
+        /// </summary>
+        /// <param name="userRepository">Repository of the user.</param>
+        public UserServices(IUserRepository userRepository)
+        {
+            this._userRepository = userRepository;
+        }
+
+        /// <summary>
+        /// Creates a new user and passes them to repository for storage.
+        /// </summary>
+        /// <param name="fullName">Full name of the user</param>
+        /// <param name="userName">Unique username of the sue</param>
+        /// <param name="phone">Phone number of the user</param>
+        /// <param name="password">Password of the user</param>
+        /// <returns>Returns whether the new user is stored or not</returns>
+        internal bool CreateUser(string fullName, string userName, string phone, string password)
+        {
+            if (this._userRepository.IsUserAlreadyExists(userName, phone))
+            {
+                return false;
+            }
+
+            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(password));
+            string hashedPassword = Convert.ToHexString(hash).ToLowerInvariant();
+
+            bool isAdminPresent = this._userRepository.IsAdminPresent();
+
+            User user = new User
+            {
+                Name = fullName,
+                UserName = userName,
+                Phone = phone,
+                Password = hashedPassword,
+                IsAdmin = isAdminPresent ? false : true,
+            };
+
+            this._userRepository.AddUser(user);
+            return true;
+        }
+
+        /// <summary>
+        /// Checks whether the user account exists or not.
+        /// </summary>
+        /// <param name="userName">Unique username of the user</param>
+        /// <returns>Returns whether the user name is valid or not.</returns>
+        internal bool IsUserAccountExists(string userName)
+        {
+            return this._userRepository.IsUserNameValid(userName);
+        }
+
+        /// <summary>
+        /// Checks whether the user data already exists in the repository or not.
+        /// </summary>
+        /// <param name="userName">Unqiue username of the user</param>
+        /// <param name="password">Password of the user</param>
+        /// <returns>Returns true if user already exists or vice-versa</returns>
+        internal bool UserExists(string userName, string password)
+        {
+            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(password));
+            string hashedPassword = Convert.ToHexString(hash).ToLowerInvariant();
+
+            if (this._userRepository.IsRegisteredUser(userName, hashedPassword))
+            {
+                return true;
+            }
+
+            return false;
+        }
+    }
+}
+
+
+
+
+
+using GroceryShopApp.Interface;
+using GroceryShopApp.Model;
+
+namespace GroceryShopApp.Services
+{
+    /// <summary>
+    /// Handles the business logics for the wishlist.
+    /// </summary>
+    internal class WishlistServices
+    {
+        private readonly IWishlistRepository _wishlistRepository;
+        private readonly IProductRepository _productRepository;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WishlistServices"/> class.
+        /// </summary>
+        /// <param name="wishlistRepository">Repository of the wishlist.</param>
+        /// <param name="productRepository">Repository of the products.</param>
+        public WishlistServices(IWishlistRepository wishlistRepository, IProductRepository productRepository)
+        {
+            this._wishlistRepository = wishlistRepository;
+            this._productRepository = productRepository;
+        }
+
+        /// <summary>
+        /// Adds a product to the user's wishlist.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productName">Name of the product.</param>
+        /// <returns>Returns the result of the wishlist operation.</returns>
+        internal string AddToWishlist(string userName, string productName)
+        {
+            Product? product = this._productRepository.GetAllProducts()
+                .FirstOrDefault(item => item.Name.Equals(productName, StringComparison.OrdinalIgnoreCase));
+
+            if (product == null)
+            {
+                return "Product not found.";
+            }
+
+            if (this._wishlistRepository.GetWishlist(userName)
+                .Any(item => item.Product.Name.Equals(productName, StringComparison.OrdinalIgnoreCase)))
+            {
+                return "Product already exists in wishlist.";
+            }
+
+            Cart cart = new Cart
+            {
+                UserName = userName,
+                Product = product,
+                CartQuantity = 1,
+            };
+
+            this._wishlistRepository.AddToWishlist(cart);
+            return "Product added to wishlist successfully.";
+        }
+
+        /// <summary>
+        /// Retrieves all products in the user's wishlist.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <returns>List of wishlist products.</returns>
+        internal List<Cart> GetWishlist(string userName)
+        {
+            return this._wishlistRepository.GetWishlist(userName);
+        }
+
+        /// <summary>
+        /// Removes a product from the user's wishlist.
+        /// </summary>
+        /// <param name="userName">Username of the user.</param>
+        /// <param name="productName">Name of the product.</param>
+        internal void RemoveFromWishlist(string userName, string productName)
+        {
+            this._wishlistRepository.RemoveFromWishlist(userName, productName);
+        }
+    }
+}
+
+
+
+
+using System.Text;
+using GroceryShopApp.Model;
+using GroceryShopApp.Services;
+
+namespace GroceryShopApp.View
+{
+    /// <summary>
+    /// Enables the admin to enter details to login.
+    /// </summary>
+    internal class AdminLogin
+    {
+        private readonly AdminServices _adminServices;
+        private readonly UserServices _userServices;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AdminLogin"/> class.
+        /// </summary>
+        /// <param name="adminServices">Services of admin.</param>
+        /// <param name="userServices">Services of user.</param>
+        public AdminLogin(AdminServices adminServices, UserServices userServices)
+        {
+            this._adminServices = adminServices;
+            this._userServices = userServices;
+        }
+
+        /// <summary>
+        /// Asks the user for admin credentials to login.
+        /// </summary>
+        internal void Login()
+        {
+            Console.Write(@"
+==================================
+          ADMIN LOG-IN
+==================================
+");
+
+            Console.Write("Enter admin user-name: ");
+            string? userName = Console.ReadLine();
+
+            Console.Write(@"Enter admin password [4-20 character with letter and digits]
+[Press TAB key to view/hide the password]: ");
+            string? password = this.ReadMaskedPassword();
+
+            string validatorMessage = Validator.ValidateLoginFields(userName, password);
+
+            if (validatorMessage != "passed")
+            {
+                ConsoleHelper.WriteErrorMessage($"\n{validatorMessage}\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            if (this._adminServices.IsAdmin(userName!, password!))
+            {
+                ConsoleHelper.WriteSuccessMessage("\nWelcome! Admin\n");
+                this.DisplayLowStockProducts();
+                Thread.Sleep(1000);
+                this.AdminMenu();
+                return;
+            }
+
+            if (!this._userServices.IsUserAccountExists(userName!))
+            {
+                ConsoleHelper.WriteErrorMessage("\nUsername does not exists\n");
+            }
+            else if (!this._userServices.UserExists(userName!, password!))
+            {
+                ConsoleHelper.WriteErrorMessage("\nPassword is not valid\n");
+            }
+            else
+            {
+                ConsoleHelper.WriteErrorMessage("\nUser is not an admin\n");
+            }
+
+            ConsoleHelper.CleanConsole();
+        }
+
+        /// <summary>
+        /// Displays the products whose stock is low.
+        /// </summary>
+        internal void DisplayLowStockProducts()
+        {
+            List<Product> products = this._adminServices.GetLowStockProducts();
+
+            if (products.Count == 0)
+            {
+                ConsoleHelper.WriteSuccessMessage("\nAll product stocks are sufficient.\n");
+                return;
+            }
+
+            ConsoleHelper.WriteErrorMessage(@"
+==================================
+        LOW STOCK ALERT
+==================================
+");
+
+            foreach (Product product in products)
+            {
+                ConsoleHelper.WriteErrorMessage($"Product: {product.Name} | Remaining Stock: {product.Quantity}\n");
+            }
+
+            ConsoleHelper.WriteErrorMessage("==================================\n");
+        }
+
+        /// <summary>
+        /// Displays the menu options for the admin.
+        /// </summary>
+        internal void AdminMenu()
+        {
+            while (true)
+            {
+                Console.Write(@"
+==================================
+          ADMIN MENU
+==================================
+[V]iew Customer Orders
+[S]tock Management
+[L]ogout
+
+Enter Choice: ");
+
+                ConsoleKey userChoice = Console.ReadKey().Key;
+                Console.Clear();
+
+                switch (userChoice)
+                {
+                    case ConsoleKey.V:
+                        this.DisplayOrders();
+                        break;
+
+                    case ConsoleKey.S:
+                        this.UpdateStock();
+                        break;
+
+                    case ConsoleKey.L:
+                        ConsoleHelper.WriteColored("\nLogging out...", ConsoleColor.Yellow);
+                        Thread.Sleep(1000);
+                        Console.Clear();
+                        return;
+
+                    default:
+                        ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Displays all products and allows the admin to update stock using the serial number.
+        /// </summary>
+        private void UpdateStock()
+        {
+            List<Product> products = this._adminServices.GetAllProducts();
+
+            if (products.Count == 0)
+            {
+                ConsoleHelper.WriteErrorMessage("\nNo products available.\n");
+                return;
+            }
+
+            Console.WriteLine("\n========== PRODUCT STOCK ==========\n");
+            Console.WriteLine("{0,-10} {1,-25} {2,-15}", "S.No", "Product Name", "Available Stock");
+            Console.WriteLine("--------------------------------------------------");
+
+            for (int i = 0; i < products.Count; i++)
+            {
+                Console.WriteLine("{0,-10} {1,-25} {2,-15}", i + 1, products[i].Name, products[i].Quantity);
+            }
+
+            Console.WriteLine("\nEnter the serial number of the product to update:");
+
+            int serialNumber;
+
+            while (!int.TryParse(Console.ReadLine(), out serialNumber) ||
+                serialNumber < 1 || serialNumber > products.Count)
+            {
+                ConsoleHelper.WriteErrorMessage("\nEnter a valid serial number.\n");
+                Console.Write("Enter serial number: ");
+            }
+
+            Product selectedProduct = products[serialNumber - 1];
+            int existingStock = selectedProduct.Quantity;
+
+            Console.Write($@"
+
+Selected Product: {selectedProduct.Name}
+Available Stock: {existingStock}
+
+[A]dd stock to existing amount
+[D]efine new stock amount
+
+Enter Choice: ");
+
+            ConsoleKey stockChoice = Console.ReadKey().Key;
+            Console.WriteLine();
+
+            if (stockChoice != ConsoleKey.A && stockChoice != ConsoleKey.D)
+            {
+                ConsoleHelper.WriteErrorMessage("\nInvalid choice.\n");
+                return;
+            }
+
+            int quantity;
+
+            if (stockChoice == ConsoleKey.A)
+            {
+                Console.Write("\nEnter quantity to add: ");
+            }
+            else
+            {
+                Console.Write("\nEnter new stock quantity: ");
+            }
+
+            while (!int.TryParse(Console.ReadLine(), out quantity) ||
+                quantity < 0 ||
+                (stockChoice == ConsoleKey.A && quantity == 0))
+            {
+                ConsoleHelper.WriteErrorMessage("\nEnter a valid stock quantity.\n");
+                Console.Write("Enter quantity: ");
+            }
+
+            bool isAddStock = stockChoice == ConsoleKey.A;
+
+            bool isUpdated = this._adminServices.UpdateProductStock(
+                selectedProduct.Name,
+                quantity,
+                isAddStock);
+
+            if (isUpdated)
+            {
+                int updatedStock = isAddStock
+                    ? existingStock + quantity
+                    : quantity;
+
+                ConsoleHelper.WriteSuccessMessage($"\nStock updated successfully for {selectedProduct.Name}.\n");
+                Console.WriteLine($"Previous Stock: {existingStock}");
+                Console.WriteLine($"Updated Stock: {updatedStock}\n");
+            }
+            else
+            {
+                ConsoleHelper.WriteErrorMessage("\nUnable to update product stock.\n");
+            }
+        }
+
+        /// <summary>
+        /// Displays all customer orders.
+        /// </summary>
+        private void DisplayOrders()
+        {
+            List<Order> orders = this._adminServices.GetAllOrders();
+
+            Console.WriteLine(@"
+==================================
+        CUSTOMER ORDERS
+==================================");
+
+            if (orders.Count == 0)
+            {
+                ConsoleHelper.WriteErrorMessage("\nNo orders found.\n");
+                ConsoleHelper.CleanConsole();
+                return;
+            }
+
+            foreach (Order order in orders)
+            {
+                Console.WriteLine($@"
+==================================
+Order ID: {order.OrderId}
+Customer: {order.UserName}
+Order Date: {order.OrderDate}
+Delivery Address: {order.DeliveryAddress}
+Delivery Date: {order.DeliveryDate}
+Delivery Time: {order.DeliveryTime}");
+
+                foreach (OrderItem item in order.Items)
+                {
+                    Console.WriteLine($@"
+Product: {item.ProductName}
+Price: ₹{item.Price}
+Quantity: {item.Quantity}
+Subtotal: ₹{item.SubTotal}");
+                }
+
+                Console.WriteLine($@"
+Total Amount: ₹{order.TotalAmount}
+==================================");
+            }
+
+            ConsoleHelper.CleanConsole();
+        }
+
+        /// <summary>
+        /// Reads password input from the console, allowing the user to toggle visibility using the Tab key.
+        /// </summary>
+        /// <returns>The plain-text password entered by the user.</returns>
+        private string ReadMaskedPassword()
+        {
+            StringBuilder password = new StringBuilder();
+            bool isHidden = true;
+
+            while (true)
+            {
+                ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
+
+                if (keyInfo.Key == ConsoleKey.Enter)
+                {
+                    Console.WriteLine();
+                    break;
+                }
+                else if (keyInfo.Key == ConsoleKey.Tab)
+                {
+                    isHidden = !isHidden;
+
+                    for (int i = 0; i < password.Length; i++)
+                    {
+                        Console.Write("\b \b");
+                    }
+
+                    Console.Write(isHidden ? new string('*', password.Length) : password.ToString());
+                }
+                else if (keyInfo.Key == ConsoleKey.Backspace)
+                {
+                    if (password.Length > 0)
+                    {
+                        password.Remove(password.Length - 1, 1);
+                        Console.Write("\b \b");
+                    }
+                }
+                else if (!char.IsControl(keyInfo.KeyChar))
+                {
+                    password.Append(keyInfo.KeyChar);
+                    Console.Write(isHidden ? '*' : keyInfo.KeyChar);
+                }
+            }
+
+            return password.ToString();
+        }
+    }
+}
+
+
